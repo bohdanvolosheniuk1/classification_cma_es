@@ -114,6 +114,10 @@ class MixtureCMAES:
     em_steps : ітерацій EM на кожну зовнішню ітерацію.
     max_iter : ліміт зовнішніх ітерацій.
     tol : відносна точність зупинки.
+    cov_lr : швидкість оновлення коваріаційних матриць (0..1).
+        Чисте EM (lr=1) дає передчасний колапс дисперсії на унімодальних
+        задачах. Менші значення зберігають дисперсію довше — як rank-μ
+        оновлення коваріації в класичному CMA-ES.
     adaptive : чи підлаштовувати k під час виконання.
     patience : ітерацій стагнації для додавання нового піку.
     max_k : верхня межа на k у самоадаптивному режимі.
@@ -127,6 +131,7 @@ class MixtureCMAES:
     em_steps: int = 5
     max_iter: int = 100
     tol: float = 1e-6
+    cov_lr: float = 0.2
     adaptive: bool = False
     patience: int = 10
     max_k: int = 20
@@ -177,9 +182,18 @@ class MixtureCMAES:
             X_top = samples[top_idx]
 
             if X_top.shape[0] >= k:
-                weights, means, covs = _em_iterate(
+                new_w, new_m, new_c = _em_iterate(
                     X_top, weights, means, covs, n_steps=self.em_steps,
                 )
+                # моментум на коваріацію: запобігає колапсу дисперсії
+                # на унімодальних задачах (аналог rank-μ оновлення в CMA-ES).
+                lr = self.cov_lr
+                if len(new_c) == len(covs):
+                    covs = [(1 - lr) * covs[j] + lr * new_c[j] for j in range(len(covs))]
+                else:
+                    covs = new_c
+                means = new_m
+                weights = new_w
 
             if self.adaptive:
                 weights, means, covs, k, removed = self._maybe_shrink(weights, means, covs, k)
