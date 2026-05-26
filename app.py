@@ -253,37 +253,64 @@ if results:
 
     # ----- charts -----------------------------------------------------------
 
-    st.subheader("Метрики на тесті")
-    chart_df = df[["model", "test_accuracy", "test_f1", "test_auc"]].melt(
-        id_vars="model", var_name="metric", value_name="value",
-    )
-    chart_df["metric"] = chart_df["metric"].str.replace("test_", "")
-    bar = (
-        alt.Chart(chart_df)
-        .mark_bar()
-        .encode(
-            x=alt.X("model:N", sort=None, title="Модель"),
-            y=alt.Y("value:Q", scale=alt.Scale(domain=[0, 1.01]), title="Значення"),
-            color=alt.Color("metric:N", title="Метрика"),
-            xOffset=alt.XOffset("metric:N"),
-            tooltip=["model", "metric", alt.Tooltip("value:Q", format=".4f")],
-        )
-        .properties(height=350)
-    )
-    st.altair_chart(bar, use_container_width=True)
+    def _zoomed_domain(vals: np.ndarray, pad_low: float = 0.02,
+                       pad_high: float = 0.005, min_span: float = 0.05):
+        """Динамічний діапазон Y-осі — щоб видно було різницю при значеннях ~1."""
+        finite = vals[np.isfinite(vals)]
+        if len(finite) == 0:
+            return [0.0, 1.0]
+        lo = max(0.0, float(finite.min()) - pad_low)
+        hi = min(1.0, float(finite.max()) + pad_high)
+        if hi - lo < min_span:
+            lo = max(0.0, hi - min_span)
+        return [lo, hi]
 
-    st.subheader("Час навчання")
-    time_chart = (
-        alt.Chart(df)
-        .mark_bar(color="#888")
-        .encode(
-            x=alt.X("model:N", sort=None),
-            y=alt.Y("fit_time_s:Q", title="Час, с"),
-            tooltip=["model", alt.Tooltip("fit_time_s:Q", format=".2f")],
+    st.subheader("Метрики на тесті")
+    st.caption("Кожна метрика — окрема панель, Y-вісь zoomed щоб видно було різницю")
+    metric_cols = st.columns(3)
+    metric_titles = [
+        ("test_accuracy", "Accuracy"),
+        ("test_f1", "F1"),
+        ("test_auc", "AUC"),
+    ]
+    for col, (mkey, mname) in zip(metric_cols, metric_titles):
+        vals = df[mkey].to_numpy()
+        domain = _zoomed_domain(vals)
+        base = alt.Chart(df).encode(
+            x=alt.X("model:N", sort=None, title=None,
+                    axis=alt.Axis(labelAngle=-30)),
+            y=alt.Y(f"{mkey}:Q", title=mname,
+                    scale=alt.Scale(domain=domain, nice=False)),
+            color=alt.Color("model:N", legend=None),
+            tooltip=["model", alt.Tooltip(f"{mkey}:Q", format=".4f")],
         )
-        .properties(height=250)
+        bars = base.mark_bar()
+        labels = base.mark_text(
+            align="center", baseline="bottom", dy=-3,
+            color="white", fontSize=10,
+        ).encode(text=alt.Text(f"{mkey}:Q", format=".3f"))
+        col.altair_chart((bars + labels).properties(height=280),
+                         use_container_width=True)
+
+    st.subheader("Час навчання (логарифмічна шкала)")
+    df_time = df.copy()
+    # лог-шкала не любить 0 — підставляємо нижню межу
+    df_time["fit_time_clipped"] = df_time["fit_time_s"].clip(lower=0.001)
+    base_t = alt.Chart(df_time).encode(
+        x=alt.X("model:N", sort=None, title=None,
+                axis=alt.Axis(labelAngle=-30)),
+        y=alt.Y("fit_time_clipped:Q", title="Час, с (log)",
+                scale=alt.Scale(type="log")),
+        color=alt.Color("model:N", legend=None),
+        tooltip=["model", alt.Tooltip("fit_time_s:Q", format=".3f")],
     )
-    st.altair_chart(time_chart, use_container_width=True)
+    time_chart = base_t.mark_bar()
+    time_labels = base_t.mark_text(
+        align="center", baseline="bottom", dy=-3,
+        color="white", fontSize=10,
+    ).encode(text=alt.Text("fit_time_s:Q", format=".2f"))
+    st.altair_chart((time_chart + time_labels).properties(height=280),
+                    use_container_width=True)
 
     # ----- CMA convergence --------------------------------------------------
 
