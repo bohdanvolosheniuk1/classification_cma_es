@@ -68,21 +68,47 @@ def load_phiusiil(data_dir: Path | None = None) -> Dataset:
     return Dataset(name="phiusiil", X=X, y=y, task="binary", n_classes=2)
 
 
+def _load_steel_plate_uci(cache_dir: Path) -> pd.DataFrame:
+    """Fallback на UCI #198 — оригінальний Steel Plates Faults (база Kaggle S4E3)."""
+    cache = cache_dir / "uci_steel_plates_faults.csv"
+    if cache.exists():
+        return pd.read_csv(cache)
+    try:
+        from ucimlrepo import fetch_ucirepo
+    except ImportError as e:
+        raise FileNotFoundError(
+            "Ні Kaggle-файлу, ні ucimlrepo. Поставте: pip install ucimlrepo"
+        ) from e
+    ds = fetch_ucirepo(id=198)
+    X = ds.data.features
+    y_raw = ds.data.targets
+    df = pd.concat([X, y_raw], axis=1)
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(cache, index=False)
+    return df
+
+
 def load_steel_plate(data_dir: Path | None = None) -> Dataset:
-    """Steel Plate Defects (Kaggle PS S4E3, 2024). Мультиклас, 7 типів."""
+    """Steel Plate Defects. Мультиклас, 7 типів дефектів.
+
+    Спочатку шукає train.csv (Kaggle Playground Series S4E3, 2024).
+    Якщо немає — fallback на UCI dataset #198 (Steel Plates Faults),
+    який є оригіналом, що Kaggle взяв за основу.
+    """
     if data_dir is None:
         data_dir = DATA_DIR / "steel_plate"
     csv_path = data_dir / "train.csv"
-    if not csv_path.exists():
-        raise FileNotFoundError(
-            f"{csv_path} не знайдено. Завантажте train.csv з Kaggle: "
-            "kaggle competitions download -c playground-series-s4e3 "
-            f"-p {data_dir} --unzip"
-        )
-    df = pd.read_csv(csv_path)
 
+    if csv_path.exists():
+        df = pd.read_csv(csv_path)
+    else:
+        print(f"  [load_steel_plate] {csv_path} не знайдено — fallback UCI #198")
+        df = _load_steel_plate_uci(data_dir)
+
+    # Kaggle має опечатку K_Scatch, UCI пише правильно K_Scratch — нормалізуємо
+    df = df.rename(columns={"K_Scatch": "K_Scratch"})
     label_cols = [
-        "Pastry", "Z_Scratch", "K_Scatch", "Stains",
+        "Pastry", "Z_Scratch", "K_Scratch", "Stains",
         "Dirtiness", "Bumps", "Other_Faults",
     ]
     missing = [c for c in label_cols if c not in df.columns]
@@ -91,7 +117,7 @@ def load_steel_plate(data_dir: Path | None = None) -> Dataset:
 
     y = df[label_cols].idxmax(axis=1).rename("defect")
     drop = label_cols + (["id"] if "id" in df.columns else [])
-    X = df.drop(columns=drop)
+    X = df.drop(columns=drop, errors="ignore")
     return Dataset(name="steel_plate", X=X, y=y, task="multiclass", n_classes=7)
 
 

@@ -166,19 +166,22 @@ def run_experiment(
     use_mlflow: bool = False,
     experiment_name: str = "classification_cma_es",
     mlflow_uri: Optional[str] = None,
+    on_dataset_ready: Optional[Callable[[dict], None]] = None,
     on_model_start: Optional[Callable[[str, int, int], None]] = None,
     on_model_done: Optional[Callable[[str, dict], None]] = None,
     on_model_error: Optional[Callable[[str, Exception], None]] = None,
 ) -> tuple[list[dict], dict]:
     """Виконує експеримент. Повертає (results, dataset_info).
 
-    Колбеки on_model_start/on_model_done/on_model_error використовуються
-    для відображення прогресу в UI (Streamlit) або в CLI.
+    Колбеки on_dataset_ready/on_model_start/on_model_done/on_model_error
+    використовуються для прогресу в UI (Streamlit) або в CLI.
     """
     np.random.seed(seed)
 
     X_tr, X_te, y_tr, y_te, info = prepare_data(dataset, sample=sample, seed=seed)
     task = info["task"]
+    if on_dataset_ready is not None:
+        on_dataset_ready(info)
     results: list[dict] = []
 
     total = len(models)

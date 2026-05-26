@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import time
+from pathlib import Path
 from typing import Optional
 
 import altair as alt
@@ -13,6 +15,42 @@ import streamlit as st
 from classifiers.pipeline import (
     ALL_MODELS, DATASETS, prepare_data, results_to_table, run_experiment,
 )
+
+
+# куди скидаємо проміжний стан — щоб після розриву websocket рефреш
+# сторінки відновив останні результати
+STATE_FILE = Path("results") / "_last_run.json"
+
+
+def _save_state(results: list[dict], info: dict, config: dict) -> None:
+    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    def safe(o):
+        if isinstance(o, np.ndarray):
+            return o.tolist()
+        if isinstance(o, (np.integer, np.floating)):
+            return o.item()
+        return o
+    payload = {
+        "results": [
+            {k: ([safe(x) for x in v] if isinstance(v, list) else safe(v))
+             for k, v in r.items()}
+            for r in results
+        ],
+        "info": {k: safe(v) for k, v in info.items()},
+        "config": {k: safe(v) for k, v in config.items()},
+        "ts": time.time(),
+    }
+    STATE_FILE.write_text(json.dumps(payload, ensure_ascii=False, default=str),
+                          encoding="utf-8")
+
+
+def _load_state() -> Optional[dict]:
+    if not STATE_FILE.exists():
+        return None
+    try:
+        return json.loads(STATE_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return None
 
 
 st.set_page_config(
@@ -63,11 +101,16 @@ with st.sidebar:
 # ----- session state ---------------------------------------------------------
 
 if "results" not in st.session_state:
-    st.session_state["results"] = None
-if "info" not in st.session_state:
-    st.session_state["info"] = None
-if "config" not in st.session_state:
-    st.session_state["config"] = None
+    # відновлюємо з диска, якщо є — після рефреша або розриву websocket
+    persisted = _load_state()
+    if persisted is not None:
+        st.session_state["results"] = persisted.get("results")
+        st.session_state["info"] = persisted.get("info")
+        st.session_state["config"] = persisted.get("config")
+    else:
+        st.session_state["results"] = None
+        st.session_state["info"] = None
+        st.session_state["config"] = None
 
 
 # ----- show dataset preview --------------------------------------------------
@@ -96,6 +139,12 @@ if run_btn:
     progress = st.progress(0.0, text="Підготовка...")
     log_area = st.empty()
     log_lines: list[str] = []
+    partial_results: list[dict] = []
+    cur_config = {
+        "dataset": dataset, "sample": sample, "folds": folds,
+        "cma_iter": cma_iter, "seed": int(seed),
+    }
+    cur_info_holder = {"info": None}
 
     def on_start(name: str, i: int, total: int):
         progress.progress((i - 1) / total, text=f"[{i}/{total}] {name}...")
@@ -110,10 +159,19 @@ if run_btn:
             f"auc={tm['auc']:.4f} (fit {r['fit_time']:.1f}s)"
         )
         log_area.code("\n".join(log_lines))
+        # копія результату для збереження на диск
+        snapshot = dict(r)
+        snapshot["model"] = name
+        partial_results.append(snapshot)
+        if cur_info_holder["info"] is not None:
+            _save_state(partial_results, cur_info_holder["info"], cur_config)
 
     def on_error(name: str, e: Exception):
         log_lines[-1] = f"✗ {name}: ПОМИЛКА {e}"
         log_area.code("\n".join(log_lines))
+
+    def on_ready(info: dict):
+        cur_info_holder["info"] = info
 
     t0 = time.time()
     try:
@@ -125,6 +183,7 @@ if run_btn:
             cma_iter=cma_iter,
             seed=int(seed),
             use_mlflow=use_mlflow,
+            on_dataset_ready=on_ready,
             on_model_start=on_start,
             on_model_done=on_done,
             on_model_error=on_error,
@@ -141,13 +200,9 @@ if run_btn:
 
     st.session_state["results"] = results
     st.session_state["info"] = info
-    st.session_state["config"] = {
-        "dataset": dataset,
-        "sample": sample,
-        "folds": folds,
-        "cma_iter": cma_iter,
-        "seed": int(seed),
-    }
+    st.session_state["config"] = cur_config
+    # фінальний snapshot на диск
+    _save_state(results, info, cur_config)
 
 
 # ----- display results -------------------------------------------------------
@@ -159,6 +214,7 @@ if results:
     st.divider()
 
     cfg = st.session_state["config"] or {}
+    info = info or {}
     cols = st.columns(5)
     cols[0].metric("Датасет", cfg.get("dataset", "?"))
     cols[1].metric("Train", info.get("n_train", "?"))

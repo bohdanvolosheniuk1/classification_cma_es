@@ -1,0 +1,11 @@
+[server]
+# Великі повідомлення для результатів і артефактів
+maxMessageSize = 500
+# Не вимикаємось при тимчасовому розриві з браузером
+enableWebsocketCompression = false
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+base = "dark"
