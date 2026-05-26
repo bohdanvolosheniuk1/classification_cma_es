@@ -73,6 +73,19 @@ SPACES = {
 }
 
 
+def _random_search_1d(neg_score, space, n_evals: int, rng: np.random.Generator):
+    """Простий fallback для 1-вимірних просторів — пакет cma не любить dim=1."""
+    samples = rng.uniform(space.lows[0], space.highs[0], size=n_evals)
+    best_x = None
+    best_f = float("inf")
+    for v in samples:
+        f = neg_score(np.array([v]))
+        if f < best_f:
+            best_f = f
+            best_x = np.array([v])
+    return best_x, best_f
+
+
 def tune_with_cma(
     factory: Callable,
     space: HyperSpace,
@@ -95,6 +108,12 @@ def tune_with_cma(
         model = factory(**params)
         scores = cross_val_score(model, X, y, cv=cv, scoring=scoring, n_jobs=1)
         return -float(scores.mean())
+
+    # для 1-вимірних просторів cma іноді ламається — використовуємо random search
+    if space.dim == 1:
+        rng = np.random.default_rng(random_state)
+        best_x, best_f = _random_search_1d(neg_score, space, pop_size * max_iter, rng)
+        return space.transform(best_x), -best_f, {"best_x": best_x, "best_f": best_f}
 
     x0 = (space.lows + space.highs) / 2.0
     bounds_t = (space.lows.tolist(), space.highs.tolist())
