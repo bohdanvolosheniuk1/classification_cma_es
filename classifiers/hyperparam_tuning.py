@@ -65,11 +65,26 @@ def space_mlp() -> HyperSpace:
     )
 
 
+def space_gam() -> HyperSpace:
+    # n_knots, degree, log10(C) — параметри з розділу 1 диплома:
+    # k — кількість базисних функцій, степінь сплайна, λ = 1/C
+    return HyperSpace(
+        lows=np.array([3.0, 2.0, -3.0]),
+        highs=np.array([15.0, 4.0, 3.0]),
+        transform=lambda x: {
+            "n_knots": int(np.clip(round(x[0]), 3, 15)),
+            "degree": int(np.clip(round(x[1]), 2, 4)),
+            "C": float(10 ** np.clip(x[2], -3, 3)),
+        },
+    )
+
+
 SPACES = {
     "logreg": space_logreg,
     "svm": space_svm,
     "knn": space_knn,
     "mlp": space_mlp,
+    "gam": space_gam,
 }
 
 

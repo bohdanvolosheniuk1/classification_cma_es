@@ -15,16 +15,16 @@ from .crossval import kfold_evaluate, split_train_test
 from .data import load_dataset
 from .hyperparam_tuning import SPACES, tune_with_cma
 from .metrics import aggregate_folds, compute_metrics
-from .models import make_knn, make_logreg, make_mlp, make_svm
+from .models import make_gam, make_knn, make_logreg, make_mlp, make_svm
 from .preprocessing import build_preprocessor, encode_target
 
 
 DATASETS = ["phiusiil", "steel_plate", "loan_approval"]
 
 ALL_MODELS = [
-    "logreg", "svm", "knn", "mlp",
+    "logreg", "svm", "knn", "mlp", "gam",
     "cma_classic", "cma_mixture",
-    "tuned_logreg", "tuned_svm", "tuned_knn", "tuned_mlp",
+    "tuned_logreg", "tuned_svm", "tuned_knn", "tuned_mlp", "tuned_gam",
 ]
 
 BASE_FACTORIES = {
@@ -32,6 +32,7 @@ BASE_FACTORIES = {
     "svm": make_svm,
     "knn": make_knn,
     "mlp": make_mlp,
+    "gam": make_gam,
 }
 
 

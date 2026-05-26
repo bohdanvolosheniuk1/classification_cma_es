@@ -1,4 +1,4 @@
-"""Базові класифікатори (sklearn)."""
+"""Базові класифікатори (sklearn) + GAM з розділу 1 диплома."""
 
 from __future__ import annotations
 
@@ -6,6 +6,8 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn.svm import SVC
+
+from .gam import GAMClassifier
 
 
 def make_logreg(**kwargs):
@@ -38,9 +40,16 @@ def make_mlp(**kwargs):
     return MLPClassifier(**params)
 
 
+def make_gam(**kwargs):
+    params = dict(n_knots=5, degree=3, C=1.0)
+    params.update(kwargs)
+    return GAMClassifier(**params)
+
+
 BASE_MODELS = {
     "logreg": make_logreg,
     "svm": make_svm,
     "knn": make_knn,
     "mlp": make_mlp,
+    "gam": make_gam,
 }
