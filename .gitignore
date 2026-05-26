@@ -1,0 +1,36 @@
+# venv
+venv/
+.venv/
+env/
+
+# python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# data and runs (не комітимо)
+data/
+mlruns/
+mlartifacts/
+results/
+*.csv
+*.parquet
+*.zip
+
+# kaggle credentials
+kaggle.json
+.kaggle/
+
+# нотатки
+TODO.txt
+notes.md
