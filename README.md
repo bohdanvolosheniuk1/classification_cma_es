@@ -79,6 +79,17 @@ mlflow ui
 
 і відкрити http://localhost:5000.
 
+### Графічний інтерфейс (Streamlit)
+
+```
+streamlit run app.py
+```
+
+Відкриє http://localhost:8501. У бічній панелі — вибір датасету, моделей,
+розмір вибірки, кількість фолдів, ітерації CMA-ES. Після кнопки
+"Запустити" — таблиця з метриками, стовпчасті діаграми по acc/F1/AUC,
+графік збіжності для CMA-моделей, експорт результатів у CSV.
+
 ## Структура проекту
 
 ```
@@ -93,9 +104,11 @@ classifiers/                  # пакет
   crossval.py                 # k-fold + train/test split
   metrics.py                  # accuracy, f1, AUC
   tracking.py                 # MLflow
+  pipeline.py                 # спільна логіка для CLI та UI
 scripts/
   download.py
-  run_experiment.py
+  run_experiment.py           # CLI
+app.py                        # Streamlit GUI
 tests/                        # pytest
 ```
 

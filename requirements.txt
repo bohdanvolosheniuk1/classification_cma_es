@@ -6,3 +6,5 @@ mlflow>=2.10
 ucimlrepo>=0.0.7
 requests>=2.31
 pytest>=8.0
+streamlit>=1.30
+altair>=5.0
