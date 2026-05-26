@@ -14,6 +14,14 @@ from contextlib import nullcontext
 from pathlib import Path
 from typing import Callable
 
+# Windows console — щоб не падало на українській і стрілочках
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 import numpy as np
 import pandas as pd
 
@@ -177,7 +185,7 @@ def main() -> int:
         idx = rng.choice(len(X), size=args.sample, replace=False)
         X = X.iloc[idx].reset_index(drop=True)
         y = y.iloc[idx].reset_index(drop=True)
-        print(f"  ↪ підсемпл до {args.sample}")
+        print(f"  -> підсемпл до {args.sample}")
 
     pre = build_preprocessor(X)
     X_arr = pre.fit_transform(X)
