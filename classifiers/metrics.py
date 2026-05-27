@@ -1,4 +1,14 @@
-"""Метрики класифікації: accuracy, F1, AUC."""
+"""Метрики класифікації — accuracy, F1, ROC-AUC.
+
+Куратор затвердив 3 метрики. Функції цього модуля підтримують одночасно
+бінарні і мультикласові задачі, автоматично перемикаючи усереднення.
+
+* Accuracy — частка правильних прогнозів. Обманює на незбалансованих
+  класах (тривіальна модель ``predict=0`` на Loan Approval = 78%).
+* F1-score — для бінарного беремо стандартний (positive class), для
+  мультикласу — weighted average по класах.
+* ROC-AUC — для бінарного звичайний, для мультикласу OvR weighted.
+"""
 
 from __future__ import annotations
 
@@ -7,10 +17,43 @@ from sklearn.metrics import accuracy_score, f1_score, roc_auc_score
 
 
 def compute_metrics(y_true, y_pred, y_proba=None, task: str = "binary") -> dict:
-    """Повертає dict з ключами accuracy, f1, auc.
+    """Обчислити accuracy, F1 і AUC для одного фолду або тесту.
 
-    y_proba: для бінарного — форма (n,) або (n, 2);
-             для мультикласу — (n, K).
+    Parameters
+    ----------
+    y_true : array-like of shape (n,)
+        Справжні мітки класів.
+    y_pred : array-like of shape (n,)
+        Прогнозовані мітки.
+    y_proba : array-like, optional
+        Ймовірності класів. Потрібно для AUC:
+
+        * для бінарної задачі — форма ``(n,)`` (ймовірність позитивного
+          класу) або ``(n, 2)``;
+        * для мультикласу — ``(n, K)``.
+    task : {"binary", "multiclass"}, default="binary"
+        Тип задачі. Впливає на ``average`` для F1 і ``multi_class``
+        для AUC.
+
+    Returns
+    -------
+    dict
+        Словник з ключами:
+
+        * ``accuracy`` — частка правильних;
+        * ``f1`` — F1-score;
+        * ``auc`` — ROC-AUC (NaN, якщо ``y_proba`` не передано чи
+          обчислення впало).
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> y_true = np.array([0, 0, 1, 1])
+    >>> y_pred = np.array([0, 1, 1, 1])
+    >>> proba = np.array([0.2, 0.6, 0.7, 0.9])
+    >>> m = compute_metrics(y_true, y_pred, y_proba=proba, task="binary")
+    >>> m["accuracy"]
+    0.75
     """
     metrics = {
         "accuracy": float(accuracy_score(y_true, y_pred)),
@@ -39,7 +82,29 @@ def compute_metrics(y_true, y_pred, y_proba=None, task: str = "binary") -> dict:
 
 
 def aggregate_folds(folds: list[dict]) -> dict:
-    """Збирає mean/std по фолдах для всіх числових метрик."""
+    """Усереднити метрики по фолдах k-fold CV.
+
+    Для кожної числової метрики обчислюються mean і std — за критерієм
+    стабільності моделі.
+
+    Parameters
+    ----------
+    folds : list of dict
+        Список словників, повернутих :func:`classifiers.crossval.kfold_evaluate`.
+
+    Returns
+    -------
+    dict
+        Для кожного числового ключа ``k`` (наприклад ``"f1"``) додається
+        ``f"{k}_mean"`` і ``f"{k}_std"``. Поле ``"fold"`` (номер фолду)
+        ігнорується.
+
+    Notes
+    -----
+    NaN-значення (наприклад ``auc`` коли AUC не вдалось обчислити)
+    виключаються з усереднення. Якщо всі значення метрики NaN —
+    результат також NaN.
+    """
     if not folds:
         return {}
     numeric_keys = [
