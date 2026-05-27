@@ -121,20 +121,45 @@ def load_steel_plate(data_dir: Path | None = None) -> Dataset:
     return Dataset(name="steel_plate", X=X, y=y, task="multiclass", n_classes=7)
 
 
+def _load_credit_default_uci(cache_dir: Path) -> pd.DataFrame:
+    """Fallback: UCI #350 Default of Credit Card Clients (2016)."""
+    cache = cache_dir / "uci_credit_default.csv"
+    if cache.exists():
+        return pd.read_csv(cache)
+    try:
+        from ucimlrepo import fetch_ucirepo
+    except ImportError as e:
+        raise FileNotFoundError(
+            "Ні Kaggle-файлу, ні ucimlrepo. Поставте: pip install ucimlrepo"
+        ) from e
+    ds = fetch_ucirepo(id=350)
+    X = ds.data.features
+    y = ds.data.targets.iloc[:, 0].rename("loan_status")
+    df = pd.concat([X, y], axis=1)
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(cache, index=False)
+    return df
+
+
 def load_loan_approval(data_dir: Path | None = None) -> Dataset:
-    """Loan Approval (Kaggle PS S4E10, 2024). Бінарна класифікація."""
+    """Кредитна класифікація. Бінарна.
+
+    Спочатку шукає train.csv (Kaggle Playground Series S4E10, 2024 — Loan
+    Approval). Якщо немає — fallback на UCI dataset #350 (Default of
+    Credit Card Clients, 2016), яка вирішує аналогічну задачу.
+    """
     if data_dir is None:
         data_dir = DATA_DIR / "loan_approval"
     csv_path = data_dir / "train.csv"
-    if not csv_path.exists():
-        raise FileNotFoundError(
-            f"{csv_path} не знайдено. Завантажте з Kaggle: "
-            "kaggle competitions download -c playground-series-s4e10 "
-            f"-p {data_dir} --unzip"
-        )
-    df = pd.read_csv(csv_path)
-    if "id" in df.columns:
-        df = df.drop(columns=["id"])
+
+    if csv_path.exists():
+        df = pd.read_csv(csv_path)
+        if "id" in df.columns:
+            df = df.drop(columns=["id"])
+    else:
+        print(f"  [load_loan_approval] {csv_path} не знайдено — fallback UCI #350")
+        df = _load_credit_default_uci(data_dir)
+
     if "loan_status" not in df.columns:
         raise ValueError("Очікувана колонка 'loan_status' відсутня")
     y = df["loan_status"]

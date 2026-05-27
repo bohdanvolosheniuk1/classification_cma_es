@@ -24,11 +24,15 @@ CMA-ES (із сумішами нормальних розподілів) як п
 
 ## Дані
 
-| Датасет | Тип | Рік | Розмір |
-|---|---|---|---|
-| PhiUSIIL Phishing URL (UCI #967) | бінарна | 2024 | 235K × 54 |
-| Steel Plate Defects (Kaggle PS S4E3) | мультикласова (7) | 2024 | 19K × 27 |
-| Loan Approval (Kaggle PS S4E10) | бінарна | 2024 | 58K × 13 |
+| Датасет | Тип | Рік | Розмір | Джерело |
+|---|---|---|---|---|
+| PhiUSIIL Phishing URL | бінарна | 2024 | 235K × 54 | UCI #967 (auto) |
+| Steel Plate Defects | мультикласова (7) | 2024 / 2010 | 19K × 27 / 1941 × 27 | Kaggle PS S4E3, fallback UCI #198 (auto) |
+| Default of Credit Card Clients | бінарна | 2024 / 2016 | 58K × 13 / 30K × 23 | Kaggle PS S4E10, fallback UCI #350 (auto) |
+
+Якщо є Kaggle CLI — використається Kaggle-варіант. Інакше — UCI
+оригінал, що скачається автоматично через `ucimlrepo` без жодних
+налаштувань.
 
 ## Метрики
 
