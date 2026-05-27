@@ -128,19 +128,21 @@ tests/                        # pytest
 pytest -q
 ```
 
-## PDF-гайд
+## Документація
 
-Детальне пояснення програми "як для дитини" зі схемами лежить
-поруч із програмною текою: `../docs/guide.pdf`.
+| Що | Де | Як перегенерувати |
+|---|---|---|
+| **PDF-гайд** "як для дитини" зі схемами | `../docs/guide.pdf` | `python scripts/generate_guide.py` |
+| **HTML API reference** (12 модулів) | `../docs/api/index.html` | `python scripts/generate_api_docs.py` |
+| Як розширювати проект | [CONTRIBUTING.md](CONTRIBUTING.md) | — |
+| Історія змін | [CHANGELOG.md](CHANGELOG.md) | — |
+| Ліцензія | [LICENSE](LICENSE) | — |
 
-Перегенерувати (виконати з кореня `classification_cma_es/`):
+Усі публічні функції/класи мають NumPy-style docstring'и
+(Parameters / Returns / Examples). pdoc генерує з них HTML.
 
-```
-python scripts/generate_guide.py
-```
-
-Скрипт малює діаграми у `../docs/figures/` і збирає PDF
-через fpdf2 (DejaVu Sans для кирилиці).
+PDF-гайд — для високорівневого розуміння (12 розділів, 7 діаграм
+через matplotlib + fpdf2). HTML API — для деталей по кожній функції.
 
 ## Алгоритм mixture CMA-ES — короткі нотатки
 

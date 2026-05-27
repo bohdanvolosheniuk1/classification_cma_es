@@ -15,3 +15,6 @@ kaggle>=1.6
 
 # Для генерації PDF-гайду (scripts/generate_guide.py)
 fpdf2>=2.8
+
+# Для генерації HTML API-документації (scripts/generate_api_docs.py)
+pdoc>=15.0
