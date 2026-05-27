@@ -22,6 +22,13 @@ from classifiers.pipeline import (
 STATE_FILE = Path("results") / "_last_run.json"
 
 
+@st.cache_data(show_spinner=False, ttl=3600)
+def _cached_prepare(dataset: str, sample: Optional[int], seed: int):
+    """Кешуємо завантаження датасету (1 година TTL) щоб preview/expander
+    не перечитував CSV і не робив PCA при кожному русі слайдера."""
+    return prepare_data(dataset, sample=sample, seed=seed)
+
+
 def _save_state(results: list[dict], info: dict, config: dict) -> None:
     STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
     def safe(o):
@@ -117,7 +124,7 @@ if "results" not in st.session_state:
 
 with st.expander(f"Інформація про датасет: {dataset}", expanded=False):
     try:
-        _, _, _, _, info_preview = prepare_data(dataset, sample=sample, seed=int(seed))
+        _, _, _, _, info_preview = _cached_prepare(dataset, sample, int(seed))
         st.json(info_preview)
     except FileNotFoundError as e:
         st.warning(
@@ -153,7 +160,6 @@ if run_btn:
 
     def on_done(name: str, r: dict):
         tm = r["test"]
-        cv = r["cv"]
         log_lines[-1] = (
             f"✓ {name}: acc={tm['accuracy']:.4f} f1={tm['f1']:.4f} "
             f"auc={tm['auc']:.4f} (fit {r['fit_time']:.1f}s)"

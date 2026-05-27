@@ -1,5 +1,4 @@
 import numpy as np
-import pytest
 
 from classifiers.cma_es import minimize_cma
 

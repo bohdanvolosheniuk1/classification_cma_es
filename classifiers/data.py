@@ -121,24 +121,42 @@ def load_steel_plate(data_dir: Path | None = None) -> Dataset:
     return Dataset(name="steel_plate", X=X, y=y, task="multiclass", n_classes=7)
 
 
+_CREDIT_DEFAULT_COLS = {
+    "X1": "LIMIT_BAL",
+    "X2": "SEX",
+    "X3": "EDUCATION",
+    "X4": "MARRIAGE",
+    "X5": "AGE",
+    "X6": "PAY_0", "X7": "PAY_2", "X8": "PAY_3",
+    "X9": "PAY_4", "X10": "PAY_5", "X11": "PAY_6",
+    "X12": "BILL_AMT1", "X13": "BILL_AMT2", "X14": "BILL_AMT3",
+    "X15": "BILL_AMT4", "X16": "BILL_AMT5", "X17": "BILL_AMT6",
+    "X18": "PAY_AMT1", "X19": "PAY_AMT2", "X20": "PAY_AMT3",
+    "X21": "PAY_AMT4", "X22": "PAY_AMT5", "X23": "PAY_AMT6",
+}
+
+
 def _load_credit_default_uci(cache_dir: Path) -> pd.DataFrame:
     """Fallback: UCI #350 Default of Credit Card Clients (2016)."""
     cache = cache_dir / "uci_credit_default.csv"
     if cache.exists():
-        return pd.read_csv(cache)
-    try:
-        from ucimlrepo import fetch_ucirepo
-    except ImportError as e:
-        raise FileNotFoundError(
-            "Ні Kaggle-файлу, ні ucimlrepo. Поставте: pip install ucimlrepo"
-        ) from e
-    ds = fetch_ucirepo(id=350)
-    X = ds.data.features
-    y = ds.data.targets.iloc[:, 0].rename("loan_status")
-    df = pd.concat([X, y], axis=1)
-    cache.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(cache, index=False)
-    return df
+        df = pd.read_csv(cache)
+    else:
+        try:
+            from ucimlrepo import fetch_ucirepo
+        except ImportError as e:
+            raise FileNotFoundError(
+                "Ні Kaggle-файлу, ні ucimlrepo. Поставте: pip install ucimlrepo"
+            ) from e
+        ds = fetch_ucirepo(id=350)
+        X = ds.data.features
+        y = ds.data.targets.iloc[:, 0].rename("loan_status")
+        df = pd.concat([X, y], axis=1)
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        df.to_csv(cache, index=False)
+
+    # перейменування X1..X23 у людські назви (LIMIT_BAL, AGE, PAY_*, BILL_AMT*, PAY_AMT*)
+    return df.rename(columns=_CREDIT_DEFAULT_COLS)
 
 
 def load_loan_approval(data_dir: Path | None = None) -> Dataset:

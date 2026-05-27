@@ -8,3 +8,7 @@ requests>=2.31
 pytest>=8.0
 streamlit>=1.30
 altair>=5.0
+
+# Опційно — для завантаження Kaggle-версій Steel Plate і Loan Approval.
+# Без kaggle.json проєкт працює на UCI fallback.
+kaggle>=1.6

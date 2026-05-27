@@ -5,7 +5,7 @@ from sklearn.preprocessing import StandardScaler
 from classifiers.hyperparam_tuning import (
     SPACES, space_knn, space_logreg, space_mlp, space_svm, tune_with_cma,
 )
-from classifiers.models import make_knn, make_logreg
+from classifiers.models import make_logreg
 
 
 def test_space_logreg_transform():
