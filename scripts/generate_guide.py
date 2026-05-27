@@ -13,7 +13,9 @@ from fpdf import FPDF
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DOCS = REPO_ROOT / "docs"
+# docs/ лежить на рівень вище програмної теки — поруч з диплом 1.docx,
+# щоб PDF-гайд був одразу під рукою без занурення в підпапки.
+DOCS = REPO_ROOT.parent / "docs"
 FIGURES = DOCS / "figures"
 
 
