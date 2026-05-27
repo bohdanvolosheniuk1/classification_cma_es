@@ -12,3 +12,6 @@ altair>=5.0
 # Опційно — для завантаження Kaggle-версій Steel Plate і Loan Approval.
 # Без kaggle.json проєкт працює на UCI fallback.
 kaggle>=1.6
+
+# Для генерації PDF-гайду (scripts/generate_guide.py)
+fpdf2>=2.8

@@ -128,6 +128,20 @@ tests/                        # pytest
 pytest -q
 ```
 
+## PDF-гайд
+
+Детальне пояснення програми "як для дитини" зі схемами:
+[docs/guide.pdf](docs/guide.pdf).
+
+Перегенерувати:
+
+```
+python scripts/generate_guide.py
+```
+
+Скрипт спочатку малює діаграми у `docs/figures/`, потім збирає PDF
+через fpdf2 (DejaVu Sans для кирилиці).
+
 ## Алгоритм mixture CMA-ES — короткі нотатки
 
 На кожній ітерації:
