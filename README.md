@@ -132,6 +132,7 @@ pytest -q
 
 | Що | Де | Як перегенерувати |
 |---|---|---|
+| **Word документація** (формальна, для здачі диплома) | `../docs/program_documentation.docx` | `python scripts/generate_docx_documentation.py` |
 | **PDF-гайд** "як для дитини" зі схемами | `../docs/guide.pdf` | `python scripts/generate_guide.py` |
 | **HTML API reference** (12 модулів) | `../docs/api/index.html` | `python scripts/generate_api_docs.py` |
 | Як розширювати проект | [CONTRIBUTING.md](CONTRIBUTING.md) | — |
