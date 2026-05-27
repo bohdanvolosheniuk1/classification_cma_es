@@ -230,26 +230,75 @@ if results:
 
     df = pd.DataFrame(results_to_table(results))
 
-    st.subheader("Метрики")
+    # ----- основна таблиця з progress-барами ---------------------------------
 
-    show_cols = ["model", "test_accuracy", "test_f1", "test_auc",
-                 "cv_f1_mean", "cv_f1_std", "fit_time_s"]
-    if "tune_time_s" in df.columns:
-        show_cols.append("tune_time_s")
-    display_df = df[show_cols].copy()
+    def _zoomed_range(vals: np.ndarray, pad: float = 0.02, min_span: float = 0.05):
+        """Адаптивний діапазон [lo, hi] для ProgressColumn — щоб видно
+        було різницю при значеннях ~1.0."""
+        finite = vals[np.isfinite(vals)]
+        if len(finite) == 0:
+            return 0.0, 1.0
+        lo = max(0.0, float(finite.min()) - pad)
+        hi = min(1.0, float(finite.max()) + 0.005)
+        if hi - lo < min_span:
+            lo = max(0.0, hi - min_span)
+        return lo, hi
 
-    styled = display_df.style.format({
-        "test_accuracy": "{:.4f}", "test_f1": "{:.4f}", "test_auc": "{:.4f}",
-        "cv_f1_mean": "{:.4f}", "cv_f1_std": "{:.4f}",
-        "fit_time_s": "{:.2f}",
-        "tune_time_s": "{:.2f}" if "tune_time_s" in show_cols else None,
-    }).background_gradient(
-        subset=["test_accuracy", "test_f1", "test_auc"],
-        cmap="Greens", vmin=0.5, vmax=1.0,
+    st.subheader("Метрики на тесті")
+    st.caption(
+        "Кольорові бари в стовпцях Accuracy / F1 / AUC — це шкала zoomed "
+        "по факту значень (щоб видно було різницю в 4-му знаку). Таблиця "
+        "сортується кліком по заголовку стовпця."
     )
-    st.dataframe(styled, use_container_width=True, hide_index=True)
 
-    # завантаження CSV
+    table_df = df.sort_values("test_f1", ascending=False).reset_index(drop=True)
+
+    acc_lo, acc_hi = _zoomed_range(df["test_accuracy"].to_numpy())
+    f1_lo,  f1_hi  = _zoomed_range(df["test_f1"].to_numpy())
+    auc_lo, auc_hi = _zoomed_range(df["test_auc"].to_numpy())
+
+    col_config = {
+        "model": st.column_config.TextColumn("Модель", width="small"),
+        "test_accuracy": st.column_config.ProgressColumn(
+            "Accuracy", format="%.4f",
+            min_value=acc_lo, max_value=acc_hi,
+        ),
+        "test_f1": st.column_config.ProgressColumn(
+            "F1", format="%.4f",
+            min_value=f1_lo, max_value=f1_hi,
+        ),
+        "test_auc": st.column_config.ProgressColumn(
+            "AUC", format="%.4f",
+            min_value=auc_lo, max_value=auc_hi,
+        ),
+        "cv_f1_mean": st.column_config.NumberColumn("CV F1 mean", format="%.4f"),
+        "cv_f1_std":  st.column_config.NumberColumn("CV F1 std",  format="%.4f"),
+        "fit_time_s": st.column_config.NumberColumn("Час, с",     format="%.2f"),
+    }
+    cols_to_show = ["model", "test_accuracy", "test_f1", "test_auc",
+                    "cv_f1_mean", "cv_f1_std", "fit_time_s"]
+    if "tune_time_s" in table_df.columns:
+        cols_to_show.append("tune_time_s")
+        col_config["tune_time_s"] = st.column_config.NumberColumn(
+            "Tune time, с", format="%.2f",
+        )
+
+    st.dataframe(
+        table_df[cols_to_show],
+        column_config=col_config,
+        hide_index=True,
+        use_container_width=True,
+        height=min(640, 38 * len(table_df) + 50),
+    )
+
+    st.caption(
+        f"Діапазони: Accuracy [{acc_lo:.3f} — {acc_hi:.3f}], "
+        f"F1 [{f1_lo:.3f} — {f1_hi:.3f}], "
+        f"AUC [{auc_lo:.3f} — {auc_hi:.3f}]"
+    )
+
+    # ----- CSV ---------------------------------------------------------------
+
     csv_bytes = df.to_csv(index=False).encode("utf-8")
     st.download_button(
         "Завантажити CSV", data=csv_bytes,
@@ -257,60 +306,15 @@ if results:
         mime="text/csv",
     )
 
-    # ----- charts -----------------------------------------------------------
+    # ----- time chart (нативний st.bar_chart — миттєво рендериться) ---------
 
-    def _zoomed_domain(vals: np.ndarray, pad_low: float = 0.02,
-                       pad_high: float = 0.01, min_span: float = 0.05):
-        """Діапазон осі по факту значень — щоб різниця в 4-му знаку була видна."""
-        finite = vals[np.isfinite(vals)]
-        if len(finite) == 0:
-            return [0.0, 1.0]
-        lo = max(0.0, float(finite.min()) - pad_low)
-        hi = min(1.0, float(finite.max()) + pad_high)
-        if hi - lo < min_span:
-            lo = max(0.0, hi - min_span)
-        return [lo, hi]
-
-    def _hbar_chart(data: pd.DataFrame, value_col: str, title: str,
-                    color: str, domain=None, fmt: str = ".4f", height: int = 40):
-        """Горизонтальний бар з міткою справа. Висота — від кількості моделей."""
-        sort_order = data.sort_values(value_col, ascending=False)["model"].tolist()
-        x_kwargs: dict = {"title": title}
-        if domain is not None:
-            x_kwargs["scale"] = alt.Scale(domain=domain, nice=False)
-        base = alt.Chart(data).encode(
-            y=alt.Y("model:N", sort=sort_order, title=None,
-                    axis=alt.Axis(labelLimit=200)),
-            x=alt.X(f"{value_col}:Q", **x_kwargs),
-            tooltip=["model", alt.Tooltip(f"{value_col}:Q", format=fmt)],
-        )
-        bars = base.mark_bar(color=color, clip=True, cornerRadius=3, size=18)
-        labels = base.mark_text(
-            align="left", baseline="middle", dx=5,
-            color="white", fontSize=12, fontWeight=500,
-        ).encode(text=alt.Text(f"{value_col}:Q", format=fmt))
-        return (bars + labels).properties(height=max(180, height * len(data)))
-
-    st.subheader("Метрики на тесті")
-    st.caption("Бари відсортовано за значенням. Вісь zoomed по факту значень.")
-    metric_cols = st.columns(3)
-    metric_specs = [
-        ("test_accuracy", "Accuracy", "#4cc9f0"),
-        ("test_f1",       "F1",       "#f72585"),
-        ("test_auc",      "AUC",      "#80ed99"),
-    ]
-    for col, (mkey, mname, hex_color) in zip(metric_cols, metric_specs):
-        domain = _zoomed_domain(df[mkey].to_numpy())
-        col.altair_chart(
-            _hbar_chart(df, mkey, mname, hex_color, domain=domain),
-            use_container_width=True,
-        )
-
-    st.subheader("Час навчання, с")
-    st.altair_chart(
-        _hbar_chart(df, "fit_time_s", "сек", "#ffb703", fmt=".2f"),
-        use_container_width=True,
+    st.subheader("Час навчання")
+    time_chart_df = (
+        df[["model", "fit_time_s"]]
+        .sort_values("fit_time_s", ascending=True)
+        .set_index("model")
     )
+    st.bar_chart(time_chart_df, horizontal=True, height=max(220, 32 * len(df)))
 
     # ----- CMA convergence --------------------------------------------------
 
