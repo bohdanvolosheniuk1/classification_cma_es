@@ -1,4 +1,18 @@
-"""Завантаження датасетів."""
+"""Завантаження трьох датасетів проекту.
+
+Модуль забезпечує єдиний інтерфейс :func:`load_dataset` для трьох
+наборів даних:
+
+* ``phiusiil`` — PhiUSIIL Phishing URL Dataset (UCI #967, 2024).
+* ``steel_plate`` — Steel Plate Defects (Kaggle Playground S4E3, 2024,
+  з UCI #198 fallback).
+* ``loan_approval`` — Loan Approval / Default of Credit Card Clients
+  (Kaggle Playground S4E10, 2024, з UCI #350 fallback).
+
+Якщо локальний CSV не знайдено — для phiusiil та fallback-варіантів
+датасет автоматично завантажується через ``ucimlrepo``. Kaggle-файли
+завантажуються вручну через ``scripts/download.py`` (потрібен kaggle.json).
+"""
 
 from __future__ import annotations
 
@@ -9,10 +23,31 @@ import pandas as pd
 
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+"""Базова тека для CSV-файлів — ``<repo>/data/<dataset_name>/``."""
 
 
 @dataclass
 class Dataset:
+    """Контейнер для одного завантаженого датасету.
+
+    Attributes
+    ----------
+    name : str
+        Ідентифікатор датасету (``"phiusiil"`` / ``"steel_plate"`` /
+        ``"loan_approval"``).
+    X : pandas.DataFrame
+        Матриця ознак до препроцесингу. Може містити числові
+        й категоріальні колонки. Препроцесинг виконує
+        :func:`classifiers.preprocessing.build_preprocessor`.
+    y : pandas.Series
+        Цільова змінна. Для бінарних задач — 0/1; для мультикласу
+        — строкові імена класів (наприклад, типи дефектів).
+    task : str
+        Тип задачі: ``"binary"`` або ``"multiclass"``.
+    n_classes : int
+        Кількість унікальних класів у ``y``.
+    """
+
     name: str
     X: pd.DataFrame
     y: pd.Series
@@ -46,7 +81,31 @@ def _read_or_fetch_phiusiil(csv_path: Path) -> pd.DataFrame:
 
 
 def load_phiusiil(data_dir: Path | None = None) -> Dataset:
-    """PhiUSIIL Phishing URL (UCI, 2024). Бінарна класифікація."""
+    """Завантажити PhiUSIIL Phishing URL Dataset.
+
+    UCI dataset #967 (2024). Бінарна класифікація phishing-сайтів
+    за 54 числовими ознаками URL-адреси (довжина, кількість крапок,
+    наявність HTTPS, ентропія тощо).
+
+    При першому виклику завантажує дані через ``ucimlrepo`` і кешує
+    у вигляді CSV. Наступні виклики читають із кешу.
+
+    Parameters
+    ----------
+    data_dir : pathlib.Path, optional
+        Тека для CSV. За замовчуванням — ``<repo>/data/phiusiil/``.
+
+    Returns
+    -------
+    Dataset
+        З ``task="binary"``, ``n_classes=2``. ``y == 1`` — справжній сайт,
+        ``y == 0`` — phishing.
+
+    Raises
+    ------
+    FileNotFoundError
+        Якщо CSV відсутній і ``ucimlrepo`` не встановлено.
+    """
     if data_dir is None:
         data_dir = DATA_DIR / "phiusiil"
     csv_path = data_dir / "PhiUSIIL_Phishing_URL_Dataset.csv"
@@ -89,11 +148,37 @@ def _load_steel_plate_uci(cache_dir: Path) -> pd.DataFrame:
 
 
 def load_steel_plate(data_dir: Path | None = None) -> Dataset:
-    """Steel Plate Defects. Мультиклас, 7 типів дефектів.
+    """Завантажити Steel Plate Defects.
 
-    Спочатку шукає train.csv (Kaggle Playground Series S4E3, 2024).
-    Якщо немає — fallback на UCI dataset #198 (Steel Plates Faults),
-    який є оригіналом, що Kaggle взяв за основу.
+    Мультикласова класифікація 7 типів дефектів металевих пластин
+    (Pastry, Z_Scratch, K_Scratch, Stains, Dirtiness, Bumps, Other_Faults).
+
+    Спочатку шукає Kaggle-варіант (``train.csv`` із Playground Series
+    S4E3, 2024, ~19 219 рядків × 27 ознак). Якщо локального файлу немає
+    — автоматично завантажує UCI #198 (1 941 × 27 рядків), який є
+    першоджерелом Kaggle-датасету.
+
+    Колонка ``K_Scatch`` у Kaggle (з опечаткою) автоматично
+    перейменовується на ``K_Scratch`` як у UCI.
+
+    Parameters
+    ----------
+    data_dir : pathlib.Path, optional
+        Тека для CSV. За замовчуванням — ``<repo>/data/steel_plate/``.
+
+    Returns
+    -------
+    Dataset
+        З ``task="multiclass"``, ``n_classes=7``. ``y`` — строкові
+        імена типів дефектів.
+
+    Raises
+    ------
+    ValueError
+        Якщо у датасеті відсутня хоча б одна з очікуваних 7 колонок
+        міток.
+    FileNotFoundError
+        Якщо й Kaggle-файлу немає, і ``ucimlrepo`` не встановлено.
     """
     if data_dir is None:
         data_dir = DATA_DIR / "steel_plate"
@@ -160,11 +245,35 @@ def _load_credit_default_uci(cache_dir: Path) -> pd.DataFrame:
 
 
 def load_loan_approval(data_dir: Path | None = None) -> Dataset:
-    """Кредитна класифікація. Бінарна.
+    """Завантажити кредитну класифікацію (Loan Approval / Credit Default).
 
-    Спочатку шукає train.csv (Kaggle Playground Series S4E10, 2024 — Loan
-    Approval). Якщо немає — fallback на UCI dataset #350 (Default of
-    Credit Card Clients, 2016), яка вирішує аналогічну задачу.
+    Бінарна задача: спрогнозувати, чи буде клієнт у дефолті.
+
+    Спочатку шукає Kaggle-варіант (``train.csv`` із Playground Series
+    S4E10, 2024, ~58 645 рядків × 13 ознак). Якщо немає — fallback на
+    UCI #350 *Default of Credit Card Clients* (2016, 30 000 × 23). UCI-
+    варіант перейменовує колонки ``X1..X23`` на стандартні імена
+    ``LIMIT_BAL``, ``AGE``, ``PAY_*``, ``BILL_AMT*``, ``PAY_AMT*``.
+
+    Класи незбалансовані (~78% / 22%) — це робить задачу складнішою
+    й корисною для порівняння моделей за F1 / AUC.
+
+    Parameters
+    ----------
+    data_dir : pathlib.Path, optional
+        Тека для CSV. За замовчуванням — ``<repo>/data/loan_approval/``.
+
+    Returns
+    -------
+    Dataset
+        З ``task="binary"``, ``n_classes=2``. ``y == 1`` — дефолт.
+
+    Raises
+    ------
+    ValueError
+        Якщо у датасеті відсутня колонка ``loan_status``.
+    FileNotFoundError
+        Якщо й Kaggle-файлу немає, і ``ucimlrepo`` не встановлено.
     """
     if data_dir is None:
         data_dir = DATA_DIR / "loan_approval"
@@ -190,9 +299,35 @@ LOADERS = {
     "steel_plate": load_steel_plate,
     "loan_approval": load_loan_approval,
 }
+"""Реєстр доступних датасетів. Використовується :func:`load_dataset`."""
 
 
 def load_dataset(name: str) -> Dataset:
+    """Універсальний завантажувач за іменем.
+
+    Parameters
+    ----------
+    name : {"phiusiil", "steel_plate", "loan_approval"}
+        Ідентифікатор датасету.
+
+    Returns
+    -------
+    Dataset
+        Готовий до подальшого препроцесингу й навчання моделей.
+
+    Raises
+    ------
+    ValueError
+        Якщо ``name`` не міститься у :data:`LOADERS`.
+
+    Examples
+    --------
+    >>> ds = load_dataset("phiusiil")
+    >>> ds.task
+    'binary'
+    >>> ds.n_classes
+    2
+    """
     if name not in LOADERS:
         raise ValueError(f"Невідомий датасет {name!r}, доступні: {list(LOADERS)}")
     return LOADERS[name]()
