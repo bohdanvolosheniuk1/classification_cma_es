@@ -1,15 +1,19 @@
 @echo off
-REM Запуск Streamlit-дашборду. Подвiйний клiк - запуск.
-chcp 65001 >nul
+REM Launch Streamlit dashboard. Double-click to run.
 cd /d "%~dp0"
-call .venv\Scripts\activate.bat
-if errorlevel 1 (
-    echo Не вдалось активувати venv. Перевірте що тека .venv існує.
+
+if not exist ".venv\Scripts\activate.bat" (
+    echo ERROR: .venv folder not found.
+    echo Run setup first: py -3 -m venv .venv ^&^& .venv\Scripts\activate ^&^& pip install -e .
     pause
     exit /b 1
 )
-echo Запускаю Streamlit...
+
+call .venv\Scripts\activate.bat
+echo Starting Streamlit on http://localhost:8501
+echo Close this window to stop the server.
+echo.
 streamlit run app.py
 echo.
-echo Сервер зупинено. Натисніть будь-яку клавішу для виходу.
+echo Server stopped. Press any key to exit.
 pause >nul

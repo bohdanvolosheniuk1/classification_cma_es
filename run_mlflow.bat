@@ -1,13 +1,16 @@
 @echo off
-REM Запуск MLflow UI на http://localhost:5000
-chcp 65001 >nul
+REM Launch MLflow UI on http://localhost:5000
 cd /d "%~dp0"
-call .venv\Scripts\activate.bat
-if errorlevel 1 (
-    echo Не вдалось активувати venv.
+
+if not exist ".venv\Scripts\activate.bat" (
+    echo ERROR: .venv folder not found.
     pause
     exit /b 1
 )
+
+call .venv\Scripts\activate.bat
 echo MLflow UI: http://localhost:5000
+echo Close this window to stop.
+echo.
 mlflow ui
 pause >nul
