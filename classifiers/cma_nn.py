@@ -1,9 +1,28 @@
-"""Нейронна мережа, що навчається через CMA-ES.
+"""Нейронна мережа, ваги якої навчає CMA-ES.
 
-Це і є "5-й метод" — підхід, досліджений у дисертації Літвінчук Ю.А.
-Ваги повнозв'язної мережі вкладено в один вектор і оптимізуються
-або класичним CMA-ES (пакет cma), або розширеним CMA-ES зі сумішами
-нормальних розподілів (власна реалізація в mixture_cma_es).
+Це і є **"5-й метод"** із завдання куратора — підхід, що походить із
+дисертації Літвінчук Ю.А. (2024). Ідея проста: всі ваги невеликої
+повнозв'язної нейромережі укладаються в один плоский вектор
+:math:`w \\in \\mathbb{R}^n` і CMA-ES шукає такий :math:`w`, який
+мінімізує кросентропію на тренувальних даних.
+
+Це принципово відрізняється від класичного backpropagation:
+
+* немає обчислення градієнтів — лише прямий прохід (forward) і
+  значення лосу;
+* підходить для недиференційовних архитектур (хоча наша звичайна);
+* повільніше, але універсальніше — оптимізатор той самий, що і
+  для tuning гіперпараметрів чи інших задач.
+
+Доступні два режими через параметр ``method``:
+
+* ``"classic"`` — :func:`classifiers.cma_es.minimize_cma` (пакет ``cma``);
+* ``"mixture"`` — :class:`classifiers.mixture_cma_es.MixtureCMAES`
+  (власна реалізація зі сумішами за Літвінчук).
+
+Для роботи на широких ознаках і великих вибірках передбачено
+автоматичний PCA (``max_features``) і субсемплування train
+(``max_train_samples``).
 """
 
 from __future__ import annotations
@@ -70,24 +89,67 @@ def _cross_entropy(probs: np.ndarray, y_int: np.ndarray, eps: float = 1e-12) -> 
 # ---- класифікатор -------------------------------------------------------
 
 class CMAESNeuralNet(BaseEstimator, ClassifierMixin):
-    """Невелика NN з sklearn-сумісним інтерфейсом, навчена CMA-ES.
+    """Невелика повнозв'язна NN, навчена CMA-ES (sklearn-сумісний API).
 
-    Параметри
-    ---------
-    hidden_layer_sizes : tuple
-        Розміри прихованих шарів. За замовчуванням (8,).
-    activation : "tanh" або "relu".
-    method : "classic" — пакет cma; "mixture" — розширений CMA-ES.
-    max_iter : ітерацій CMA-ES.
-    pop_size : розмір популяції (None — за замовчуванням cma чи 40).
-    sigma0 : початкова дисперсія для CMA-ES.
-    n_components : кількість піків у суміші (тільки для method="mixture").
-    adaptive : чи самоадаптивний підбір k (тільки для method="mixture").
-    max_features : якщо задано і ознак більше — попередній PCA до цього розміру.
-    max_train_samples : якщо задано і прикладів більше — стратифіковане
-        семплування для прискорення оцінки cost-функції CMA-ES.
-    l2 : коефіцієнт L2-регуляризації на ваги.
-    random_state : seed.
+    Parameters
+    ----------
+    hidden_layer_sizes : tuple of int, default=(8,)
+        Розміри прихованих шарів. Один шар (за замовчуванням) — це
+        компроміс: достатньо параметрів для нелінійності, але CMA-ES
+        ще може ефективно шукати у такому просторі.
+    activation : {"tanh", "relu"}, default="tanh"
+        Функція активації прихованих шарів. На виході — завжди softmax.
+    method : {"classic", "mixture"}, default="classic"
+        Оптимізатор: ``classic`` — пакет ``cma``; ``mixture`` —
+        :class:`~classifiers.mixture_cma_es.MixtureCMAES` зі сумішами
+        нормальних розподілів (за Літвінчук).
+    max_iter : int, default=80
+        Ліміт ітерацій CMA-ES.
+    pop_size : int, optional
+        Розмір популяції. ``None`` — за замовчуванням cma (для
+        ``classic``) або ``max(40, 4 + 3·ln(n_params))`` для ``mixture``.
+    sigma0 : float, default=0.3
+        Початковий крок мутації.
+    n_components : int, default=3
+        Кількість піків у суміші (тільки для ``method="mixture"``).
+    adaptive : bool, default=True
+        Самоадаптивний підбір ``k`` (тільки для ``method="mixture"``).
+    max_features : int, optional
+        Якщо задано і кількість вхідних ознак більша — попередній PCA
+        до цього розміру. Прискорює CMA-ES (менше ваг = менша
+        розмірність пошуку).
+    max_train_samples : int, optional
+        Якщо задано і кількість тренувальних прикладів більша —
+        випадково субсемплити train для пришвидшення обчислення лосу.
+        Не впливає на test-метрики.
+    l2 : float, default=0.0
+        Коефіцієнт L2-регуляризації на ваги (додається до лосу).
+    random_state : int, optional
+        Seed для відтворюваності.
+
+    Attributes
+    ----------
+    classes_ : numpy.ndarray
+        Унікальні мітки класів.
+    best_w_ : numpy.ndarray
+        Найкращий знайдений вектор ваг.
+    history_ : list of float
+        Крива збіжності (для побудови графіку у дашборді).
+    n_evaluations_, n_iterations_ : int
+        Статистика CMA-ES.
+    final_k_ : int
+        Фінальна кількість піків (1 для ``classic``, може бути різна
+        для ``mixture``).
+
+    Examples
+    --------
+    >>> from sklearn.datasets import make_classification
+    >>> X, y = make_classification(n_samples=200, n_features=8, random_state=0)
+    >>> clf = CMAESNeuralNet(hidden_layer_sizes=(4,), method="classic",
+    ...                       max_iter=30, random_state=0).fit(X, y)
+    >>> proba = clf.predict_proba(X[:3])
+    >>> proba.shape
+    (3, 2)
     """
 
     def __init__(

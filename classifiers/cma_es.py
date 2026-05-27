@@ -1,4 +1,16 @@
-"""Класичний CMA-ES — обгортка над пакетом `cma`."""
+"""Класичний CMA-ES — обгортка над пакетом ``cma``.
+
+Алгоритм CMA-ES (Covariance Matrix Adaptation Evolution Strategy) —
+це стохастичний оптимізатор **без похідних**, описаний у розділі 2
+дипломної роботи. Він шукає мінімум функції, ітеративно семплуючи
+точки з багатовимірного нормального розподілу :math:`\\mathcal{N}(m, \\sigma^2 C)`
+і оновлюючи його параметри за найкращими точками.
+
+Модуль надає тонку обгортку :func:`minimize_cma` навколо
+``cma.CMAEvolutionStrategy`` Ніколаса Хансена (той самий пакет
+використовує Літвінчук Ю.А. у дисертації). Розширений варіант зі
+сумішами реалізовано окремо в :mod:`classifiers.mixture_cma_es`.
+"""
 
 from __future__ import annotations
 
@@ -10,6 +22,22 @@ import numpy as np
 
 @dataclass
 class CMAResult:
+    """Результат однієї оптимізації CMA-ES.
+
+    Attributes
+    ----------
+    best_x : numpy.ndarray of shape (d,)
+        Знайдений найкращий розв'язок.
+    best_f : float
+        Значення цільової функції в ``best_x``.
+    n_evaluations : int
+        Скільки разів викликано ``objective(x)`` сумарно.
+    n_iterations : int
+        Скільки зовнішніх ітерацій (поколінь) виконано.
+    history : list of float
+        ``best_f`` після кожної ітерації — для побудови кривої збіжності.
+    """
+
     best_x: np.ndarray
     best_f: float
     n_evaluations: int
@@ -27,7 +55,51 @@ def minimize_cma(
     random_state: Optional[int] = None,
     verbose: bool = False,
 ) -> CMAResult:
-    """Запускає cma.CMAEvolutionStrategy на мінімізацію objective(x)."""
+    """Мінімізувати ``objective`` класичним CMA-ES.
+
+    Parameters
+    ----------
+    objective : callable
+        Цільова функція ``f(x: np.ndarray) -> float``. Має приймати
+        1D-вектор і повертати число для мінімізації.
+    x0 : array-like
+        Початкова точка пошуку. Її довжина визначає розмірність задачі.
+    sigma0 : float, default=0.3
+        Початковий крок мутації :math:`\\sigma`. Має бути близьким до
+        очікуваної відстані між початковою точкою і оптимумом.
+    pop_size : int, optional
+        Розмір популяції (:math:`\\lambda`). За замовчуванням
+        ``4 + floor(3 * ln(d))`` як рекомендує Hansen.
+    max_iter : int, default=100
+        Ліміт ітерацій (поколінь).
+    bounds : tuple of (lo, hi), optional
+        Скаляри або вектори межами області пошуку. Якщо задано —
+        точки клипуються.
+    random_state : int, optional
+        Seed. Пакет cma не приймає 0, тому внутрішньо додається +1.
+    verbose : bool, default=False
+        Чи друкувати прогрес у stdout.
+
+    Returns
+    -------
+    CMAResult
+        Результат із полями ``best_x``, ``best_f`` та історією.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> def sphere(x): return float(np.sum(x * x))
+    >>> res = minimize_cma(sphere, x0=[1.0, 2.0, 3.0],
+    ...                    sigma0=0.5, max_iter=50, random_state=1)
+    >>> res.best_f < 1e-3
+    True
+
+    Notes
+    -----
+    Алгоритм безградієнтний — він не вимагає диференційовності
+    ``objective``. Підходить для оптимізації hyperparameters,
+    тренування малих NN, інженерних задач тощо.
+    """
     import cma
 
     x0 = np.asarray(x0, dtype=float).tolist()

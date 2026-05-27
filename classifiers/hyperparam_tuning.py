@@ -1,4 +1,18 @@
-"""Підбір гіперпараметрів базових класифікаторів за допомогою CMA-ES."""
+"""Підбір гіперпараметрів базових класифікаторів через CMA-ES.
+
+Модуль реалізує модель ``tuned_*`` — обгортку, де CMA-ES виступає
+тюнером гіперпараметрів. Для кожної базової моделі визначено простір
+гіперпараметрів (:class:`HyperSpace`) з межами і функцією перетворення
+вектора CMA-ES у словник параметрів sklearn-моделі.
+
+Найцікавіший випадок — ``tuned_gam``: CMA-ES (розділ 2 диплома)
+підбирає ``n_knots`` і ``λ = 1/C`` для GAM (розділ 1 диплома). Це
+**пряме об'єднання обох теоретичних розділів** у одній моделі.
+
+Для 1-вимірних просторів (наприклад, kNN з одним ``n_neighbors``)
+використовується ``random search`` fallback — пакет ``cma`` коректно
+не працює з ``dim == 1``.
+"""
 
 from __future__ import annotations
 
@@ -14,7 +28,23 @@ from .mixture_cma_es import MixtureCMAES
 
 @dataclass
 class HyperSpace:
-    """Простір гіперпараметрів: межі для CMA-ES + transform у sklearn-params."""
+    """Опис простору гіперпараметрів для CMA-ES.
+
+    CMA-ES шукає у звичайному ``R^d`` (з опційними межами), а реальні
+    параметри моделі можуть бути цілими (n_neighbors), логарифмічними
+    (C, gamma) або структурованими (hidden_layer_sizes). ``transform``
+    конвертує вектор CMA-ES у словник параметрів sklearn-моделі.
+
+    Attributes
+    ----------
+    lows : numpy.ndarray of shape (d,)
+        Нижні межі координат у просторі пошуку.
+    highs : numpy.ndarray of shape (d,)
+        Верхні межі.
+    transform : callable
+        Функція ``np.ndarray -> dict``, що мапить вектор CMA-ES у
+        kwargs для відповідної ``make_*`` фабрики.
+    """
 
     lows: np.ndarray
     highs: np.ndarray
@@ -22,11 +52,12 @@ class HyperSpace:
 
     @property
     def dim(self) -> int:
+        """Розмірність простору пошуку."""
         return len(self.lows)
 
 
 def space_logreg() -> HyperSpace:
-    # log10(C) у [-3, 3]
+    """Простір для LogisticRegression: log10(C) ∈ [-3, 3]."""
     return HyperSpace(
         lows=np.array([-3.0]),
         highs=np.array([3.0]),
@@ -35,6 +66,7 @@ def space_logreg() -> HyperSpace:
 
 
 def space_svm() -> HyperSpace:
+    """Простір для SVM: log10(C) ∈ [-3, 3], log10(gamma) ∈ [-4, 1]."""
     return HyperSpace(
         lows=np.array([-3.0, -4.0]),
         highs=np.array([3.0, 1.0]),
@@ -46,6 +78,7 @@ def space_svm() -> HyperSpace:
 
 
 def space_knn() -> HyperSpace:
+    """Простір для kNN: n_neighbors ∈ [1, 30] (цілочисельне)."""
     return HyperSpace(
         lows=np.array([1.0]),
         highs=np.array([30.0]),
@@ -54,6 +87,7 @@ def space_knn() -> HyperSpace:
 
 
 def space_mlp() -> HyperSpace:
+    """Простір для MLP: hidden_size ∈ [4, 128], log10(alpha), log10(lr)."""
     return HyperSpace(
         lows=np.array([4.0, -6.0, -4.0]),
         highs=np.array([128.0, -1.0, -1.0]),
@@ -66,8 +100,16 @@ def space_mlp() -> HyperSpace:
 
 
 def space_gam() -> HyperSpace:
-    # n_knots, degree, log10(C) — параметри з розділу 1 диплома:
-    # k — кількість базисних функцій, степінь сплайна, λ = 1/C
+    """Простір для GAM (міст між розд. 1 і розд. 2 диплома).
+
+    Шукаємо параметри з розділу 1.5 диплома:
+
+    * ``n_knots`` ∈ [3, 15] — кількість базисних функцій (:math:`k`);
+    * ``degree`` ∈ [2, 4] — степінь сплайну;
+    * ``log10(C)`` ∈ [-3, 3] — параметр згладжування :math:`\\lambda = 1/C`.
+
+    Оптимізація — алгоритмом з розділу 2 (CMA-ES).
+    """
     return HyperSpace(
         lows=np.array([3.0, 2.0, -3.0]),
         highs=np.array([15.0, 4.0, 3.0]),
@@ -86,6 +128,11 @@ SPACES = {
     "mlp": space_mlp,
     "gam": space_gam,
 }
+"""Реєстр функцій-фабрик для просторів гіперпараметрів.
+
+Використовується pipeline'ом для моделей з префіксом ``tuned_*``.
+Ключі мають збігатися з ключами :data:`classifiers.models.BASE_MODELS`.
+"""
 
 
 def _random_search_1d(neg_score, space, n_evals: int, rng: np.random.Generator):
@@ -113,9 +160,43 @@ def tune_with_cma(
     pop_size: int = 10,
     random_state: int = 42,
 ):
-    """Шукає оптимальні гіперпараметри factory(**params).
+    """Підібрати гіперпараметри ``factory(**params)`` через CMA-ES.
 
-    Повертає (best_params_dict, best_score, raw_result).
+    Цільова функція — від'ємне середнє ``cross_val_score`` (бо CMA-ES
+    мінімізує). Для 1-вимірного простору використовується random search
+    fallback.
+
+    Parameters
+    ----------
+    factory : callable
+        Фабрика моделі, наприклад :func:`classifiers.models.make_logreg`.
+        Приймає ``**kwargs`` із простору параметрів і повертає
+        sklearn-сумісний естіматор.
+    space : HyperSpace
+        Простір пошуку для CMA-ES і функція трансформації.
+    X, y : array-like
+        Тренувальні дані.
+    cv : int, default=3
+        Кількість фолдів у внутрішньому ``cross_val_score``.
+    scoring : str, default="f1_weighted"
+        sklearn-метрика для оптимізації.
+    method : {"classic", "mixture"}, default="classic"
+        Тип CMA-ES.
+    max_iter : int, default=20
+        Ліміт ітерацій оптимізатора.
+    pop_size : int, default=10
+        Розмір популяції на ітерацію.
+    random_state : int, default=42
+        Seed.
+
+    Returns
+    -------
+    best_params : dict
+        Найкращі знайдені параметри (готові для ``factory(**best_params)``).
+    best_score : float
+        Найкраще значення ``scoring`` (вже з правильним знаком, не negated).
+    raw_result : CMAResult or MixtureCMAResult or dict
+        Внутрішній об'єкт оптимізатора (історія, evals тощо).
     """
 
     def neg_score(x: np.ndarray) -> float:
