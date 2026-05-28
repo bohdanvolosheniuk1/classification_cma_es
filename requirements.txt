@@ -21,3 +21,6 @@ pdoc>=15.0
 
 # Для генерації Word-документації (scripts/generate_docx_documentation.py)
 python-docx>=1.2
+
+# Для генерації PowerPoint-презентації (scripts/generate_presentation.py)
+python-pptx>=1.0
