@@ -21,6 +21,8 @@ from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 from docx.shared import Cm, Pt
 
+import omml  # OMML-формули та inline-математика
+
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 OUT_PATH = REPO_ROOT.parent / "розділи_3_4_до_диплома.docx"
@@ -117,6 +119,118 @@ def _image(doc, path: Path, *, width_cm=14, caption=None):
 
 def _page_break(doc):
     doc.add_page_break()
+
+
+# ----- inline-математика: текст з вбудованими {var_idx} -----------------------
+import re as _re
+
+_VAR_PATTERN = _re.compile(r"\{([A-Za-zα-ωΑ-Ωа-яіїєґА-ЯІЇЄҐ]+)_([A-Za-z0-9α-ωΑ-Ω,+\-]+)\}")
+
+
+def _p_math(doc, text: str, *, size=14, indent=Cm(1.25), space=Pt(6)):
+    """Параграф з вбудованими inline математичними символами.
+
+    У шаблоні підстановки виду ``{base_sub}`` базова частина пишеться
+    курсивом, а ``sub`` — як справжній нижній індекс Word. Підтримує
+    кілька входжень в одному рядку. Решта тексту — звичайна.
+
+    Приклад::
+
+        _p_math(doc, "Параметри суміші — ваги {w_s}, центри {m_s} та "
+                     "коваріаційні матриці {C_s}.")
+    """
+    p = doc.add_paragraph()
+    pf = p.paragraph_format
+    if indent is not None:
+        pf.first_line_indent = indent
+    pf.space_after = space
+    pf.line_spacing = 1.5
+
+    pos = 0
+    for m in _VAR_PATTERN.finditer(text):
+        # текст до символу
+        if m.start() > pos:
+            r = p.add_run(text[pos:m.start()])
+            _set_run(r, size=size)
+        base, idx = m.group(1), m.group(2)
+        # база — курсивом
+        rb = p.add_run(base)
+        _set_run(rb, size=size, italic=True)
+        # індекс — нижній subscript
+        ri = p.add_run(idx)
+        _set_run(ri, size=size, italic=False)
+        ri.font.subscript = True
+        pos = m.end()
+    # хвіст
+    if pos < len(text):
+        r = p.add_run(text[pos:])
+        _set_run(r, size=size)
+    return p
+
+
+# ============================================================================
+# Високорівневі функції для формул + опис змінних
+
+def _caption(doc, text: str):
+    """Підпис під формулою — курсив по центру."""
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p.paragraph_format.space_after = Pt(8)
+    p.paragraph_format.line_spacing = 1.15
+    run = p.add_run(text)
+    _set_run(run, size=12, italic=True)
+
+
+def _where_intro(doc):
+    """Параграф 'Де:' перед списком змінних формули."""
+    p = doc.add_paragraph()
+    p.paragraph_format.space_after = Pt(2)
+    p.paragraph_format.line_spacing = 1.5
+    run = p.add_run("Де:")
+    _set_run(run, size=14)
+
+
+def _var_def(doc, symbol_runs, definition: str):
+    """Один рядок-визначення змінної формули.
+
+    Приклад виклику::
+
+        _var_def(doc, [("β", False), ("0", True)],
+                 "вільний член моделі")
+
+    Кожен елемент symbol_runs — це (текст, is_subscript). Дозволяє
+    зробити nested-індекси типу β₀ через subscript-run у Word.
+    """
+    p = doc.add_paragraph()
+    pf = p.paragraph_format
+    pf.left_indent = Cm(0.75)
+    pf.first_line_indent = Cm(-0.5)
+    pf.space_after = Pt(3)
+    pf.line_spacing = 1.4
+    # маркер
+    marker = p.add_run("•  ")
+    _set_run(marker, size=14)
+    # сам символ зі змінною з підіндексами
+    for text, is_sub in symbol_runs:
+        r = p.add_run(text)
+        _set_run(r, size=14, italic=not is_sub)
+        if is_sub:
+            r.font.subscript = True
+    # тире і визначення
+    dash = p.add_run(" — ")
+    _set_run(dash, size=14)
+    descr = p.add_run(definition)
+    _set_run(descr, size=14)
+
+
+def _add_block_formula(doc, *children):
+    """Додає блочну OMML-формулу і налаштовує її параграф."""
+    p = omml.add_block_formula(doc, *children)
+    pf = p.paragraph_format
+    pf.space_before = Pt(6)
+    pf.space_after = Pt(2)
+    pf.line_spacing = 1.5
+    return p
 
 
 # ============================================================================
@@ -332,13 +446,52 @@ def add_sections_to(doc) -> None:
         "запропоновано використовувати суміш з k нормальних розподілів. "
         "Це дозволяє алгоритму одночасно досліджувати кілька "
         "перспективних областей простору параметрів, що особливо "
-        "корисно для оптимізації мультимодальних цільових функцій. "
-        "Параметри суміші — ваги w_s, центри m_s та коваріаційні "
-        "матриці C_s — оновлюються EM-алгоритмом за найкращою половиною "
+        "корисно для оптимізації мультимодальних цільових функцій.")
+    _p_math(doc,
+        "Параметри суміші — ваги {w_s}, центри {m_s} та коваріаційні "
+        "матриці {C_s} — оновлюються EM-алгоритмом за найкращою половиною "
         "хромосом на кожній ітерації CMA-ES. Математично щільність "
         "суміші записується наступним чином.")
-    _image(doc, FIGURES_DIR / "formula_mixture_pdf.png", width_cm=14,
-           caption="Формула 3.1 — щільність суміші нормальних розподілів")
+    # p(x; θ) = Σ_{s=1}^{k} w_s · N(x; m_s, C_s)
+    _add_block_formula(doc,
+        omml.run("p", italic=True),
+        omml.fenced(omml.group(omml.run("x;"), omml.run("θ"))),
+        omml.run(" = "),
+        omml.nary("∑",
+                  lower=omml.group(omml.run("s=1", italic=False)),
+                  upper=omml.run("k", italic=True),
+                  body=omml.sub(omml.run("w", italic=True),
+                                omml.run("s", italic=True))),
+        omml.run(" · "),
+        omml.run("N", italic=False),
+        omml.fenced(omml.group(
+            omml.run("x; "),
+            omml.sub(omml.run("m", italic=True),
+                     omml.run("s", italic=True)),
+            omml.run(", "),
+            omml.sub(omml.run("C", italic=True),
+                     omml.run("s", italic=True)),
+        )),
+        omml.run(",   "),
+        omml.nary("∑",
+                  lower=omml.group(omml.run("s=1", italic=False)),
+                  upper=omml.run("k", italic=True),
+                  body=omml.sub(omml.run("w", italic=True),
+                                omml.run("s", italic=True))),
+        omml.run(" = 1"),
+    )
+    _caption(doc, "(3.1)")
+    _where_intro(doc)
+    _var_def(doc, [("k", False)],
+             "кількість компонент (піків) у суміші;")
+    _var_def(doc, [("w", False), ("s", True)],
+             "вага s-го нормального компонента, w_s ≥ 0;")
+    _var_def(doc, [("m", False), ("s", True)],
+             "вектор середніх значень s-ї компоненти;")
+    _var_def(doc, [("C", False), ("s", True)],
+             "коваріаційна матриця s-ї компоненти;")
+    _var_def(doc, [("N", False)],
+             "щільність багатовимірного нормального розподілу.")
     _p(doc,
         "Я реалізував цей алгоритм самостійно з нуля у файлі "
         "mixture_cma_es.py. Розмір власної реалізації становить близько "
@@ -352,18 +505,141 @@ def add_sections_to(doc) -> None:
         "малими ймовірностями (значення нормальної щільності у "
         "багатовимірному просторі швидко стають дуже малими, і "
         "обчислення відповідних відповідальностей через звичайні "
-        "ділення призводить до переповнення розрядної сітки). Сам "
-        "E-крок алгоритму обчислює апостеріорні відповідальності "
-        "γ_ij за наступною формулою.")
-    _image(doc, FIGURES_DIR / "formula_em_estep.png", width_cm=12,
-           caption="Формула 3.2 — E-крок EM-алгоритму")
-    _p(doc,
+        "ділення призводить до переповнення розрядної сітки).")
+    _p_math(doc,
+        "Сам E-крок алгоритму обчислює апостеріорні відповідальності "
+        "{γ_ij} за наступною формулою.")
+    # γ_ij = (w_j · N(x_i; m_j, C_j)) / Σ_s w_s · N(x_i; m_s, C_s)
+    _add_block_formula(doc,
+        omml.sub(omml.run("γ", italic=True),
+                 omml.run("ij", italic=True)),
+        omml.run(" = "),
+        omml.frac(
+            omml.group(
+                omml.sub(omml.run("w", italic=True),
+                         omml.run("j", italic=True)),
+                omml.run(" · "),
+                omml.run("N", italic=False),
+                omml.fenced(omml.group(
+                    omml.sub(omml.run("x", italic=True),
+                             omml.run("i", italic=True)),
+                    omml.run("; "),
+                    omml.sub(omml.run("m", italic=True),
+                             omml.run("j", italic=True)),
+                    omml.run(", "),
+                    omml.sub(omml.run("C", italic=True),
+                             omml.run("j", italic=True)),
+                )),
+            ),
+            omml.group(
+                omml.nary("∑",
+                    lower=omml.group(omml.run("s=1", italic=False)),
+                    upper=omml.run("k", italic=True),
+                    body=omml.group(
+                        omml.sub(omml.run("w", italic=True),
+                                 omml.run("s", italic=True)),
+                        omml.run(" · "),
+                        omml.run("N", italic=False),
+                        omml.fenced(omml.group(
+                            omml.sub(omml.run("x", italic=True),
+                                     omml.run("i", italic=True)),
+                            omml.run("; "),
+                            omml.sub(omml.run("m", italic=True),
+                                     omml.run("s", italic=True)),
+                            omml.run(", "),
+                            omml.sub(omml.run("C", italic=True),
+                                     omml.run("s", italic=True)),
+                        )),
+                    )),
+            ),
+        ),
+    )
+    _caption(doc, "(3.2)")
+    _where_intro(doc)
+    _var_def(doc, [("γ", False), ("ij", True)],
+             "апостеріорна відповідальність j-ї компоненти за точку x_i;")
+    _var_def(doc, [("x", False), ("i", True)],
+             "i-та точка вибірки (хромосома);")
+    _var_def(doc, [("w", False), ("j", True), (", ", False),
+                   ("m", False), ("j", True), (", ", False),
+                   ("C", False), ("j", True)],
+             "поточні параметри j-ї компоненти суміші.")
+    _p_math(doc,
         "На M-кроці параметри суміші перераховуються за обчисленими "
         "відповідальностями. Це включає оновлення ваг компонент, "
         "їхніх центрів та коваріаційних матриць як зважених статистик "
-        "точок з відповідними ваговими коефіцієнтами γ_ij.")
-    _image(doc, FIGURES_DIR / "formula_em_mstep.png", width_cm=15,
-           caption="Формула 3.3 — M-крок EM-алгоритму")
+        "точок з відповідними ваговими коефіцієнтами {γ_ij}.")
+    # M-крок: w_j = N_j/N,  m_j = Σ γ_ij x_i / N_j,  C_j = Σ γ_ij (x_i - m_j)(x_i - m_j)^T / N_j
+    _add_block_formula(doc,
+        omml.sub(omml.run("w", italic=True), omml.run("j", italic=True)),
+        omml.run(" = "),
+        omml.frac(
+            omml.sub(omml.run("N", italic=True), omml.run("j", italic=True)),
+            omml.run("N", italic=True),
+        ),
+        omml.run(",     "),
+        omml.sub(omml.run("m", italic=True), omml.run("j", italic=True)),
+        omml.run(" = "),
+        omml.frac(
+            omml.group(
+                omml.nary("∑",
+                    lower=omml.run("i", italic=True), upper=None,
+                    body=omml.group(
+                        omml.sub(omml.run("γ", italic=True),
+                                 omml.run("ij", italic=True)),
+                        omml.sub(omml.run("x", italic=True),
+                                 omml.run("i", italic=True)),
+                    )),
+            ),
+            omml.sub(omml.run("N", italic=True), omml.run("j", italic=True)),
+        ),
+    )
+    _caption(doc, "(3.3a)")
+    _add_block_formula(doc,
+        omml.sub(omml.run("C", italic=True), omml.run("j", italic=True)),
+        omml.run(" = "),
+        omml.frac(
+            omml.group(
+                omml.nary("∑",
+                    lower=omml.run("i", italic=True), upper=None,
+                    body=omml.group(
+                        omml.sub(omml.run("γ", italic=True),
+                                 omml.run("ij", italic=True)),
+                        omml.fenced(omml.group(
+                            omml.sub(omml.run("x", italic=True),
+                                     omml.run("i", italic=True)),
+                            omml.run(" − "),
+                            omml.sub(omml.run("m", italic=True),
+                                     omml.run("j", italic=True)),
+                        )),
+                        omml.sup(
+                            omml.fenced(omml.group(
+                                omml.sub(omml.run("x", italic=True),
+                                         omml.run("i", italic=True)),
+                                omml.run(" − "),
+                                omml.sub(omml.run("m", italic=True),
+                                         omml.run("j", italic=True)),
+                            )),
+                            omml.run("T", italic=False),
+                        ),
+                    )),
+            ),
+            omml.sub(omml.run("N", italic=True), omml.run("j", italic=True)),
+        ),
+    )
+    _caption(doc, "(3.3b)")
+    _where_intro(doc)
+    _var_def(doc, [("N", False), ("j", True)],
+             "сума відповідальностей по j-й компоненті, N_j = Σ_i γ_ij;")
+    _var_def(doc, [("N", False)],
+             "загальна кількість точок у вибірці;")
+    _var_def(doc, [("w", False), ("j", True)],
+             "оновлена вага j-ї компоненти;")
+    _var_def(doc, [("m", False), ("j", True)],
+             "оновлений вектор середніх (зважена сума точок);")
+    _var_def(doc, [("C", False), ("j", True)],
+             "оновлена коваріаційна матриця (зважена сума зовнішніх "
+             "добутків відхилень).")
     _p(doc,
         "Коваріаційні матриці перед обчисленням оберненої також "
         "регуляризуються невеликим додаванням одиничної матриці з "
@@ -384,8 +660,33 @@ def add_sections_to(doc) -> None:
         "повної заміни нова коваріація, обчислена EM-кроком, "
         "змішується зі старою у пропорції 0.2 до 0.8 відповідно до "
         "наступної формули.")
-    _image(doc, FIGURES_DIR / "formula_cov_lr.png", width_cm=14,
-           caption="Формула 3.4 — момент-усереднення коваріації")
+    # C^(t+1) = (1 - cov_lr) · C^(t) + cov_lr · C^(t)_EM
+    _add_block_formula(doc,
+        omml.sup(omml.run("C", italic=True),
+                 omml.fenced(omml.run("t+1", italic=False))),
+        omml.run(" = "),
+        omml.fenced(omml.group(omml.run("1 − "),
+                               omml.run("cov_lr", italic=True))),
+        omml.run(" · "),
+        omml.sup(omml.run("C", italic=True),
+                 omml.fenced(omml.run("t", italic=True))),
+        omml.run(" + "),
+        omml.run("cov_lr", italic=True),
+        omml.run(" · "),
+        omml.sub(omml.sup(omml.run("C", italic=True),
+                          omml.fenced(omml.run("t", italic=True))),
+                 omml.run("EM", italic=False)),
+    )
+    _caption(doc, "(3.4)")
+    _where_intro(doc)
+    _var_def(doc, [("C", False), ("(t)", True)],
+             "коваріаційна матриця на попередній ітерації;")
+    _var_def(doc, [("C", False), ("(t)", True), ("EM", True)],
+             "коваріаційна матриця, обчислена чистим EM-кроком на "
+             "поточній ітерації;")
+    _var_def(doc, [("cov_lr", False)],
+             "коефіцієнт оновлення коваріації, ∈ [0; 1] (за "
+             "замовчуванням 0.2).")
     _p(doc,
         "Така модифікація аналогічна так званому rank-μ оновленню "
         "коваріації у класичному CMA-ES, що описано в офіційному "
@@ -416,20 +717,80 @@ def add_sections_to(doc) -> None:
         "класифікатор побудовано як sklearn-пайплайн з двох послідовних "
         "кроків. На першому кроці кожна неперервна ознака датасета "
         "перетворюється через клас SplineTransformer [13], що генерує "
-        "вектор значень B-сплайнових базисних функцій. Тобто замість "
-        "однієї вхідної ознаки x_i модель отримує k нових ознак b_1(x_i), "
-        "b_2(x_i), ..., b_k(x_i), де b_j — це B-сплайнові базисні "
-        "функції з вузлами, рівномірно розподіленими по діапазону "
-        "значень ознаки. На другому кроці всі отримані базисні функції "
-        "разом подаються на вхід LogisticRegression, яка лінійно "
-        "комбінує їх із підбираними коефіцієнтами β_ij і застосовує "
-        "логіт-перетворення для отримання ймовірності класу. Така "
-        "конструкція математично еквівалентна узагальненій адитивній "
-        "моделі з логіт-функцією зв'язку, докладно описаній у "
-        "підрозділах 1.5 та 1.6 теоретичної частини диплома [1, 2]. "
-        "Загальний вигляд моделі задається формулою.")
-    _image(doc, FIGURES_DIR / "formula_gam.png", width_cm=15,
-           caption="Формула 3.5 — узагальнена адитивна модель з логіт-зв'язком")
+        "вектор значень B-сплайнових базисних функцій.")
+    _p_math(doc,
+        "Тобто замість однієї вхідної ознаки {x_i} модель отримує k "
+        "нових ознак {b_1}({x_i}), {b_2}({x_i}), ..., {b_k}({x_i}), де "
+        "{b_j} — це B-сплайнові базисні функції з вузлами, рівномірно "
+        "розподіленими по діапазону значень ознаки. На другому кроці "
+        "всі отримані базисні функції разом подаються на вхід "
+        "LogisticRegression, яка лінійно комбінує їх із підбираними "
+        "коефіцієнтами {β_ij} і застосовує логіт-перетворення для "
+        "отримання ймовірності класу. Така конструкція математично "
+        "еквівалентна узагальненій адитивній моделі з логіт-функцією "
+        "зв'язку, докладно описаній у підрозділах 1.5 та 1.6 "
+        "теоретичної частини диплома [1, 2]. Загальний вигляд моделі "
+        "задається формулою.")
+    # g(E[y|X]) = β_0 + Σ f_i(x_i),  f_i(x_i) = Σ β_ij b_j(x_i)
+    _add_block_formula(doc,
+        omml.run("g", italic=True),
+        omml.fenced(omml.group(
+            omml.run("E", italic=False),
+            omml.fenced(omml.group(omml.run("y"), omml.run(" | "),
+                                   omml.run("X")), left="[", right="]"),
+        )),
+        omml.run(" = "),
+        omml.sub(omml.run("β", italic=True), omml.run("0", italic=False)),
+        omml.run(" + "),
+        omml.nary("∑",
+            lower=omml.group(omml.run("i=1", italic=False)),
+            upper=omml.run("p", italic=True),
+            body=omml.group(
+                omml.sub(omml.run("f", italic=True),
+                         omml.run("i", italic=True)),
+                omml.fenced(omml.sub(omml.run("x", italic=True),
+                                     omml.run("i", italic=True))),
+            )),
+    )
+    _caption(doc, "(3.5a)")
+    _add_block_formula(doc,
+        omml.sub(omml.run("f", italic=True), omml.run("i", italic=True)),
+        omml.fenced(omml.sub(omml.run("x", italic=True),
+                             omml.run("i", italic=True))),
+        omml.run(" = "),
+        omml.nary("∑",
+            lower=omml.group(omml.run("j=1", italic=False)),
+            upper=omml.run("k", italic=True),
+            body=omml.group(
+                omml.sub(omml.run("β", italic=True),
+                         omml.run("ij", italic=True)),
+                omml.sub(omml.run("b", italic=True),
+                         omml.run("j", italic=True)),
+                omml.fenced(omml.sub(omml.run("x", italic=True),
+                                     omml.run("i", italic=True))),
+            )),
+    )
+    _caption(doc, "(3.5b)")
+    _where_intro(doc)
+    _var_def(doc, [("g", False)],
+             "функція зв'язку (для бінарної класифікації — логіт);")
+    _var_def(doc, [("E", False), ("[", False), ("y", False), (" | ", False),
+                   ("X", False), ("]", False)],
+             "математичне сподівання цільової змінної;")
+    _var_def(doc, [("β", False), ("0", True)],
+             "вільний член моделі (intercept);")
+    _var_def(doc, [("p", False)],
+             "кількість незалежних змінних (ознак);")
+    _var_def(doc, [("f", False), ("i", True)],
+             "гладка функція впливу i-ї ознаки;")
+    _var_def(doc, [("x", False), ("i", True)],
+             "значення i-ї незалежної змінної;")
+    _var_def(doc, [("k", False)],
+             "кількість базисних функцій (вузлів сплайну);")
+    _var_def(doc, [("b", False), ("j", True)],
+             "j-та базисна B-сплайнова функція;")
+    _var_def(doc, [("β", False), ("ij", True)],
+             "коефіцієнти моделі, підбираються логістичною регресією.")
     _p(doc,
         "У реалізації моделі є три основні параметри. Перший — це "
         "n_knots, що відповідає кількості вузлів сплайну і безпосередньо "
@@ -490,8 +851,29 @@ def add_sections_to(doc) -> None:
         "є просто часткою правильних передбачень, F1-score обчислюється "
         "за класичною формулою як гармонічне середнє precision та "
         "recall.")
-    _image(doc, FIGURES_DIR / "formula_f1.png", width_cm=11,
-           caption="Формула 3.6 — F1-score")
+    # F1 = 2 · precision · recall / (precision + recall)
+    _add_block_formula(doc,
+        omml.run("F1", italic=False),
+        omml.run(" = 2 · "),
+        omml.frac(
+            omml.group(omml.run("precision", italic=False),
+                       omml.run(" · "),
+                       omml.run("recall", italic=False)),
+            omml.group(omml.run("precision", italic=False),
+                       omml.run(" + "),
+                       omml.run("recall", italic=False)),
+        ),
+    )
+    _caption(doc, "(3.6)")
+    _where_intro(doc)
+    _var_def(doc, [("precision", False)],
+             "точність — частка вірно класифікованих позитивних "
+             "прикладів серед усіх передбачених як позитивні (TP/(TP+FP));")
+    _var_def(doc, [("recall", False)],
+             "повнота — частка вірно класифікованих позитивних "
+             "прикладів серед усіх справжніх позитивних (TP/(TP+FN));")
+    _var_def(doc, [("F1", False)],
+             "гармонічне середнє precision та recall, ∈ [0; 1].")
     _p(doc,
         "Для бінарних задач F1 і AUC обчислюються прямо. Для "
         "мультикласової задачі Steel Plate Defects F1-score "
@@ -506,8 +888,34 @@ def add_sections_to(doc) -> None:
         "ROC-кривою, що графічно зображує співвідношення True Positive "
         "Rate та False Positive Rate при різних значеннях порога "
         "класифікації.")
-    _image(doc, FIGURES_DIR / "formula_auc.png", width_cm=10,
-           caption="Формула 3.7 — ROC-AUC через інтеграл")
+    # AUC = ∫₀¹ TPR(t) d FPR(t)
+    _add_block_formula(doc,
+        omml.run("AUC", italic=False),
+        omml.run(" = "),
+        omml.nary("∫",
+            lower=omml.run("0", italic=False),
+            upper=omml.run("1", italic=False),
+            body=omml.group(
+                omml.run("TPR", italic=False),
+                omml.fenced(omml.run("t", italic=True)),
+                omml.run(" "),
+                omml.run("d", italic=False),
+                omml.run(" "),
+                omml.run("FPR", italic=False),
+                omml.fenced(omml.run("t", italic=True)),
+            ),
+            no_limit=True,
+        ),
+    )
+    _caption(doc, "(3.7)")
+    _where_intro(doc)
+    _var_def(doc, [("TPR", False), ("(", False), ("t", False), (")", False)],
+             "true positive rate (чутливість) при порозі t;")
+    _var_def(doc, [("FPR", False), ("(", False), ("t", False), (")", False)],
+             "false positive rate при порозі t;")
+    _var_def(doc, [("AUC", False)],
+             "площа під ROC-кривою, ∈ [0; 1] (0.5 — випадково, "
+             "1.0 — ідеальний класифікатор).")
 
     # ---- 3.8 ----
     _h(doc, "3.8 Графічний інтерфейс", level=2)
