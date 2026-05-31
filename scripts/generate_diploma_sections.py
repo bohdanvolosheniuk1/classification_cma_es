@@ -67,10 +67,16 @@ def _h(doc, text, level=1):
 
 
 def _bullet(doc, text):
-    p = doc.add_paragraph(style="List Bullet")
-    p.paragraph_format.space_after = Pt(4)
-    p.paragraph_format.line_spacing = 1.5
-    run = p.add_run(text)
+    # Не використовуємо style="List Bullet" — у оригінальному диплом 1.docx
+    # такого стилю немає, а python-docx падає при відсутності стилю.
+    # Робимо вручну: символ • + табуляція + текст.
+    p = doc.add_paragraph()
+    pf = p.paragraph_format
+    pf.left_indent = Cm(0.75)
+    pf.first_line_indent = Cm(-0.5)
+    pf.space_after = Pt(4)
+    pf.line_spacing = 1.5
+    run = p.add_run("•  " + text)
     _set_run(run, size=14)
 
 
@@ -78,17 +84,13 @@ def _page_break(doc):
     doc.add_page_break()
 
 
-def build_document() -> Path:
-    doc = Document()
-    normal = doc.styles["Normal"]
-    normal.font.name = "Times New Roman"
-    normal.font.size = Pt(14)
-    for section in doc.sections:
-        section.left_margin = Cm(2.5)
-        section.right_margin = Cm(1.5)
-        section.top_margin = Cm(2)
-        section.bottom_margin = Cm(2)
+def add_sections_to(doc) -> None:
+    """Додає розділи 3 і 4 у переданий Document.
 
+    Використовується як для генерації окремого файлу
+    (:func:`build_document`), так і для інтеграції в існуючий
+    диплом 1.docx через скрипт integrate_sections_to_diploma.py.
+    """
     # ========================================================================
     # РОЗДІЛ 3
     # ========================================================================
@@ -679,6 +681,21 @@ def build_document() -> Path:
         "теоретичними міркуваннями і потребує подальших "
         "експериментів з більшою кількістю ітерацій для повного "
         "обґрунтування на реальних датасетах.")
+
+
+def build_document() -> Path:
+    """Створити новий документ із розділами 3 і 4 і зберегти в OUT_PATH."""
+    doc = Document()
+    normal = doc.styles["Normal"]
+    normal.font.name = "Times New Roman"
+    normal.font.size = Pt(14)
+    for section in doc.sections:
+        section.left_margin = Cm(2.5)
+        section.right_margin = Cm(1.5)
+        section.top_margin = Cm(2)
+        section.bottom_margin = Cm(2)
+
+    add_sections_to(doc)
 
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     doc.save(str(OUT_PATH))
