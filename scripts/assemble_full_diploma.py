@@ -38,6 +38,7 @@ from generate_diploma_sections import (
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DIPLOMA_PATH = REPO_ROOT.parent / "диплом 1.docx"
 BACKUP_PATH = REPO_ROOT.parent / "диплом 1_BACKUP_до_інтеграції.docx"
+MERGED_PATH = REPO_ROOT.parent / "диплом 1_BACKUP_merged.docx"
 
 
 def _make_blank_doc() -> Document:
@@ -72,10 +73,13 @@ def main() -> int:
         toc_path = tmp / "01_toc.docx"
         toc_doc.save(str(toc_path))
 
-        # 2. Оригінал теоретичної частини (розділи 1 і 2 Богдана)
-        # Використовуємо бекап як надійне джерело
+        # 2. Оригінал теоретичної частини (розділи 1 і 2 Богдана).
+        # Якщо є merged-варіант (з об'єднаними дрібними абзацами) —
+        # використовуємо його, інакше беремо оригінал з бекапу.
+        source = MERGED_PATH if MERGED_PATH.exists() else BACKUP_PATH
+        print(f"Беру теоретичну частину з: {source.name}")
         original_path = tmp / "02_original.docx"
-        original_path.write_bytes(BACKUP_PATH.read_bytes())
+        original_path.write_bytes(source.read_bytes())
 
         # 3. Розділи 3, 4 + бібліографія
         print("Готую розділи 3, 4 і список літератури...")
