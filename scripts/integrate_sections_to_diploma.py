@@ -1,17 +1,16 @@
-"""Інтегрує розділи 3 і 4 у файл ``диплом 1.docx``.
+"""Інтегрує розділи 3, 4 та список літератури у файл ``диплом 1.docx``.
 
 Перед інтеграцією робить резервну копію оригінала у файл
 ``диплом 1_BACKUP_до_інтеграції.docx``. Потім відкриває оригінал,
-додає перенесення сторінки і два нові розділи у кінець, зберігає
-назад у той самий ``диплом 1.docx``.
+додає перенесення сторінки і три блоки у кінець:
+розділ 3, розділ 4 (з вбудованими рисунками) і список літератури.
+
+Окремо запускайте :mod:`generate_toc` для отримання файлу
+``зміст.docx`` — його Богдан вставить на початок диплома вручну.
 
 Запуск::
 
     python scripts/integrate_sections_to_diploma.py
-
-Опція ``--no-backup`` пропускає резервне копіювання (для повторних
-запусків коли бекап уже зроблено)::
-
     python scripts/integrate_sections_to_diploma.py --no-backup
 """
 
@@ -25,7 +24,7 @@ from pathlib import Path
 
 from docx import Document
 
-from generate_diploma_sections import add_sections_to
+from generate_diploma_sections import add_bibliography, add_sections_to
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -58,8 +57,11 @@ def main() -> int:
     # перенесення сторінки перед новими розділами
     doc.add_page_break()
 
-    print("Додаю розділ 3 і розділ 4...")
+    print("Додаю розділ 3 і розділ 4 (з рисунками)...")
     add_sections_to(doc)
+
+    print("Додаю список літератури...")
+    add_bibliography(doc)
 
     doc.save(str(DIPLOMA_PATH))
     size_kb = DIPLOMA_PATH.stat().st_size // 1024
