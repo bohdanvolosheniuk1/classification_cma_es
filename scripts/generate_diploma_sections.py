@@ -224,13 +224,44 @@ def _var_def(doc, symbol_runs, definition: str):
 
 
 def _add_block_formula(doc, *children):
-    """Додає блочну OMML-формулу і налаштовує її параграф."""
+    """Додає блочну OMML-формулу і налаштовує її параграф.
+
+    Використовується для inline-математики у визначеннях. Для блочних
+    формул розділу 3 застосовуємо PNG через _png_formula — це гарантує
+    відображення в усіх версіях Word, LibreOffice та при PDF-конвертації.
+    """
     p = omml.add_block_formula(doc, *children)
     pf = p.paragraph_format
     pf.space_before = Pt(6)
     pf.space_after = Pt(2)
     pf.line_spacing = 1.5
     return p
+
+
+def _png_formula(doc, png_name: str, number: str, *, width_cm: float = 12.0):
+    """Вставляє формулу як PNG із номером праворуч.
+
+    Структура: центрований параграф з картинкою + табуляція + номер
+    у форматі (N.M). Це формат, який повністю сумісний з усіма
+    рендерерами Word та PDF-конвертерами.
+    """
+    path = FIGURES_DIR / png_name
+    if not path.exists():
+        _p(doc, f"[Формула недоступна: {png_name}]", italic=True, indent=None)
+        return
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    pf = p.paragraph_format
+    pf.space_before = Pt(6)
+    pf.space_after = Pt(6)
+    # tab stop праворуч для номера формули
+    pf.tab_stops.add_tab_stop(Cm(16.0), WD_ALIGN_PARAGRAPH.RIGHT)
+    # картинка по центру
+    run_pic = p.add_run()
+    run_pic.add_picture(str(path), width=Cm(width_cm))
+    # таб + номер праворуч
+    run_num = p.add_run(f"\t{number}")
+    _set_run(run_num, size=14)
 
 
 # ============================================================================
@@ -462,35 +493,7 @@ def add_sections_to(doc) -> None:
         "матриці {C_s} — оновлюються EM-алгоритмом за найкращою половиною "
         "хромосом на кожній ітерації CMA-ES. Математично щільність "
         "суміші записується наступним чином.")
-    # p(x; θ) = Σ_{s=1}^{k} w_s · N(x; m_s, C_s)
-    _add_block_formula(doc,
-        omml.run("p", italic=True),
-        omml.fenced(omml.group(omml.run("x;"), omml.run("θ"))),
-        omml.run(" = "),
-        omml.nary("∑",
-                  lower=omml.group(omml.run("s=1", italic=False)),
-                  upper=omml.run("k", italic=True),
-                  body=omml.sub(omml.run("w", italic=True),
-                                omml.run("s", italic=True))),
-        omml.run(" · "),
-        omml.run("N", italic=False),
-        omml.fenced(omml.group(
-            omml.run("x; "),
-            omml.sub(omml.run("m", italic=True),
-                     omml.run("s", italic=True)),
-            omml.run(", "),
-            omml.sub(omml.run("C", italic=True),
-                     omml.run("s", italic=True)),
-        )),
-        omml.run(",   "),
-        omml.nary("∑",
-                  lower=omml.group(omml.run("s=1", italic=False)),
-                  upper=omml.run("k", italic=True),
-                  body=omml.sub(omml.run("w", italic=True),
-                                omml.run("s", italic=True))),
-        omml.run(" = 1"),
-    )
-    _caption(doc, "(3.1)")
+    _png_formula(doc, "formula_mixture_pdf.png", "(3.1)", width_cm=13.0)
     _where_intro(doc)
     _var_def(doc, [("k", False)],
              "кількість компонент (піків) у суміші;")
@@ -519,52 +522,7 @@ def add_sections_to(doc) -> None:
     _p_math(doc,
         "Сам E-крок алгоритму обчислює апостеріорні відповідальності "
         "{γ_ij} за наступною формулою.")
-    # γ_ij = (w_j · N(x_i; m_j, C_j)) / Σ_s w_s · N(x_i; m_s, C_s)
-    _add_block_formula(doc,
-        omml.sub(omml.run("γ", italic=True),
-                 omml.run("ij", italic=True)),
-        omml.run(" = "),
-        omml.frac(
-            omml.group(
-                omml.sub(omml.run("w", italic=True),
-                         omml.run("j", italic=True)),
-                omml.run(" · "),
-                omml.run("N", italic=False),
-                omml.fenced(omml.group(
-                    omml.sub(omml.run("x", italic=True),
-                             omml.run("i", italic=True)),
-                    omml.run("; "),
-                    omml.sub(omml.run("m", italic=True),
-                             omml.run("j", italic=True)),
-                    omml.run(", "),
-                    omml.sub(omml.run("C", italic=True),
-                             omml.run("j", italic=True)),
-                )),
-            ),
-            omml.group(
-                omml.nary("∑",
-                    lower=omml.group(omml.run("s=1", italic=False)),
-                    upper=omml.run("k", italic=True),
-                    body=omml.group(
-                        omml.sub(omml.run("w", italic=True),
-                                 omml.run("s", italic=True)),
-                        omml.run(" · "),
-                        omml.run("N", italic=False),
-                        omml.fenced(omml.group(
-                            omml.sub(omml.run("x", italic=True),
-                                     omml.run("i", italic=True)),
-                            omml.run("; "),
-                            omml.sub(omml.run("m", italic=True),
-                                     omml.run("s", italic=True)),
-                            omml.run(", "),
-                            omml.sub(omml.run("C", italic=True),
-                                     omml.run("s", italic=True)),
-                        )),
-                    )),
-            ),
-        ),
-    )
-    _caption(doc, "(3.2)")
+    _png_formula(doc, "formula_em_estep.png", "(3.2)", width_cm=11.0)
     _where_intro(doc)
     _var_def(doc, [("γ", False), ("ij", True)],
              "апостеріорна відповідальність j-ї компоненти за точку x_i;")
@@ -579,65 +537,7 @@ def add_sections_to(doc) -> None:
         "відповідальностями. Це включає оновлення ваг компонент, "
         "їхніх центрів та коваріаційних матриць як зважених статистик "
         "точок з відповідними ваговими коефіцієнтами {γ_ij}.")
-    # M-крок: w_j = N_j/N,  m_j = Σ γ_ij x_i / N_j,  C_j = Σ γ_ij (x_i - m_j)(x_i - m_j)^T / N_j
-    _add_block_formula(doc,
-        omml.sub(omml.run("w", italic=True), omml.run("j", italic=True)),
-        omml.run(" = "),
-        omml.frac(
-            omml.sub(omml.run("N", italic=True), omml.run("j", italic=True)),
-            omml.run("N", italic=True),
-        ),
-        omml.run(",     "),
-        omml.sub(omml.run("m", italic=True), omml.run("j", italic=True)),
-        omml.run(" = "),
-        omml.frac(
-            omml.group(
-                omml.nary("∑",
-                    lower=omml.run("i", italic=True), upper=None,
-                    body=omml.group(
-                        omml.sub(omml.run("γ", italic=True),
-                                 omml.run("ij", italic=True)),
-                        omml.sub(omml.run("x", italic=True),
-                                 omml.run("i", italic=True)),
-                    )),
-            ),
-            omml.sub(omml.run("N", italic=True), omml.run("j", italic=True)),
-        ),
-    )
-    _caption(doc, "(3.3a)")
-    _add_block_formula(doc,
-        omml.sub(omml.run("C", italic=True), omml.run("j", italic=True)),
-        omml.run(" = "),
-        omml.frac(
-            omml.group(
-                omml.nary("∑",
-                    lower=omml.run("i", italic=True), upper=None,
-                    body=omml.group(
-                        omml.sub(omml.run("γ", italic=True),
-                                 omml.run("ij", italic=True)),
-                        omml.fenced(omml.group(
-                            omml.sub(omml.run("x", italic=True),
-                                     omml.run("i", italic=True)),
-                            omml.run(" − "),
-                            omml.sub(omml.run("m", italic=True),
-                                     omml.run("j", italic=True)),
-                        )),
-                        omml.sup(
-                            omml.fenced(omml.group(
-                                omml.sub(omml.run("x", italic=True),
-                                         omml.run("i", italic=True)),
-                                omml.run(" − "),
-                                omml.sub(omml.run("m", italic=True),
-                                         omml.run("j", italic=True)),
-                            )),
-                            omml.run("T", italic=False),
-                        ),
-                    )),
-            ),
-            omml.sub(omml.run("N", italic=True), omml.run("j", italic=True)),
-        ),
-    )
-    _caption(doc, "(3.3b)")
+    _png_formula(doc, "formula_em_mstep.png", "(3.3)", width_cm=15.0)
     _where_intro(doc)
     _var_def(doc, [("N", False), ("j", True)],
              "сума відповідальностей по j-й компоненті, N_j = Σ_i γ_ij;")
@@ -670,24 +570,7 @@ def add_sections_to(doc) -> None:
         "повної заміни нова коваріація, обчислена EM-кроком, "
         "змішується зі старою у пропорції 0.2 до 0.8 відповідно до "
         "наступної формули.")
-    # C^(t+1) = (1 - cov_lr) · C^(t) + cov_lr · C^(t)_EM
-    _add_block_formula(doc,
-        omml.sup(omml.run("C", italic=True),
-                 omml.fenced(omml.run("t+1", italic=False))),
-        omml.run(" = "),
-        omml.fenced(omml.group(omml.run("1 − "),
-                               omml.run("cov_lr", italic=True))),
-        omml.run(" · "),
-        omml.sup(omml.run("C", italic=True),
-                 omml.fenced(omml.run("t", italic=True))),
-        omml.run(" + "),
-        omml.run("cov_lr", italic=True),
-        omml.run(" · "),
-        omml.sub(omml.sup(omml.run("C", italic=True),
-                          omml.fenced(omml.run("t", italic=True))),
-                 omml.run("EM", italic=False)),
-    )
-    _caption(doc, "(3.4)")
+    _png_formula(doc, "formula_cov_lr.png", "(3.4)", width_cm=12.0)
     _where_intro(doc)
     _var_def(doc, [("C", False), ("(t)", True)],
              "коваріаційна матриця на попередній ітерації;")
@@ -741,46 +624,7 @@ def add_sections_to(doc) -> None:
         "зв'язку, докладно описаній у підрозділах 1.5 та 1.6 "
         "теоретичної частини диплома [1, 2]. Загальний вигляд моделі "
         "задається формулою.")
-    # g(E[y|X]) = β_0 + Σ f_i(x_i),  f_i(x_i) = Σ β_ij b_j(x_i)
-    _add_block_formula(doc,
-        omml.run("g", italic=True),
-        omml.fenced(omml.group(
-            omml.run("E", italic=False),
-            omml.fenced(omml.group(omml.run("y"), omml.run(" | "),
-                                   omml.run("X")), left="[", right="]"),
-        )),
-        omml.run(" = "),
-        omml.sub(omml.run("β", italic=True), omml.run("0", italic=False)),
-        omml.run(" + "),
-        omml.nary("∑",
-            lower=omml.group(omml.run("i=1", italic=False)),
-            upper=omml.run("p", italic=True),
-            body=omml.group(
-                omml.sub(omml.run("f", italic=True),
-                         omml.run("i", italic=True)),
-                omml.fenced(omml.sub(omml.run("x", italic=True),
-                                     omml.run("i", italic=True))),
-            )),
-    )
-    _caption(doc, "(3.5a)")
-    _add_block_formula(doc,
-        omml.sub(omml.run("f", italic=True), omml.run("i", italic=True)),
-        omml.fenced(omml.sub(omml.run("x", italic=True),
-                             omml.run("i", italic=True))),
-        omml.run(" = "),
-        omml.nary("∑",
-            lower=omml.group(omml.run("j=1", italic=False)),
-            upper=omml.run("k", italic=True),
-            body=omml.group(
-                omml.sub(omml.run("β", italic=True),
-                         omml.run("ij", italic=True)),
-                omml.sub(omml.run("b", italic=True),
-                         omml.run("j", italic=True)),
-                omml.fenced(omml.sub(omml.run("x", italic=True),
-                                     omml.run("i", italic=True))),
-            )),
-    )
-    _caption(doc, "(3.5b)")
+    _png_formula(doc, "formula_gam.png", "(3.5)", width_cm=15.0)
     _where_intro(doc)
     _var_def(doc, [("g", False)],
              "функція зв'язку (для бінарної класифікації — логіт);")
@@ -861,20 +705,7 @@ def add_sections_to(doc) -> None:
         "є просто часткою правильних передбачень, F1-score обчислюється "
         "за класичною формулою як гармонічне середнє precision та "
         "recall.")
-    # F1 = 2 · precision · recall / (precision + recall)
-    _add_block_formula(doc,
-        omml.run("F1", italic=False),
-        omml.run(" = 2 · "),
-        omml.frac(
-            omml.group(omml.run("precision", italic=False),
-                       omml.run(" · "),
-                       omml.run("recall", italic=False)),
-            omml.group(omml.run("precision", italic=False),
-                       omml.run(" + "),
-                       omml.run("recall", italic=False)),
-        ),
-    )
-    _caption(doc, "(3.6)")
+    _png_formula(doc, "formula_f1.png", "(3.6)", width_cm=10.0)
     _where_intro(doc)
     _var_def(doc, [("precision", False)],
              "точність — частка вірно класифікованих позитивних "
@@ -898,26 +729,7 @@ def add_sections_to(doc) -> None:
         "ROC-кривою, що графічно зображує співвідношення True Positive "
         "Rate та False Positive Rate при різних значеннях порога "
         "класифікації.")
-    # AUC = ∫₀¹ TPR(t) d FPR(t)
-    _add_block_formula(doc,
-        omml.run("AUC", italic=False),
-        omml.run(" = "),
-        omml.nary("∫",
-            lower=omml.run("0", italic=False),
-            upper=omml.run("1", italic=False),
-            body=omml.group(
-                omml.run("TPR", italic=False),
-                omml.fenced(omml.run("t", italic=True)),
-                omml.run(" "),
-                omml.run("d", italic=False),
-                omml.run(" "),
-                omml.run("FPR", italic=False),
-                omml.fenced(omml.run("t", italic=True)),
-            ),
-            no_limit=True,
-        ),
-    )
-    _caption(doc, "(3.7)")
+    _png_formula(doc, "formula_auc.png", "(3.7)", width_cm=9.0)
     _where_intro(doc)
     _var_def(doc, [("TPR", False), ("(", False), ("t", False), (")", False)],
              "true positive rate (чутливість) при порозі t;")
@@ -1503,87 +1315,43 @@ def add_bibliography(doc) -> None:
 def add_annotation(doc) -> None:
     """Додає АНОТАЦІЮ на початку дипломної роботи.
 
-    Структура за класичним зразком кваліфікаційної роботи бакалавра:
-    шапка з ПІБ і темою, стислий опис змісту, перелік ключових результатів,
-    обсягові характеристики (сторінки, рисунки, таблиці, джерела),
-    ключові слова.
+    Структура повторює зразок з ШаблонДипломна.docx: два абзаци
+    української анотації + рядок ключових слів, далі ABSTRACT з двома
+    абзацами + Keywords. Зміст підставлено під тему Богдана.
     """
     _h(doc, "АНОТАЦІЯ", level=1)
 
     _p(doc,
-        "Волошенюк Б. А. Порівняння методів класифікації з розширеним "
-        "алгоритмом CMA-ES. — Кваліфікаційна (бакалаврська) робота за "
-        "спеціальністю 122 «Комп'ютерні науки». — Чернівецький "
-        "національний університет імені Юрія Федьковича, Чернівці, 2026.")
+        "У дипломній роботі досліджено застосування узагальнених "
+        "адитивних моделей та розширеного варіанту алгоритму адаптації "
+        "коваріаційної матриці (CMA-ES) у задачах класифікації табличних "
+        "даних. Основну увагу приділено побудові та порівняльному аналізу "
+        "методів класифікації з урахуванням кількох критеріїв якості, "
+        "зокрема точності, F1-міри та площі під ROC-кривою. У процесі "
+        "дослідження розглянуто підходи до безградієнтної оптимізації ваг "
+        "нейронних мереж та автоматичного підбору гіперпараметрів "
+        "класичних класифікаторів за допомогою класичного і розширеного "
+        "варіантів CMA-ES.")
 
     _p(doc,
-        "Дипломну роботу присвячено порівняльному аналізу методів "
-        "класифікації за участю розширеного варіанту еволюційного "
-        "алгоритму адаптації коваріаційної матриці (CMA-ES) і дослідженню "
-        "його застосовності одночасно як інструмента безградієнтного "
-        "навчання нейронної мережі і як автоматичного підбирача "
-        "гіперпараметрів класичних класифікаторів.")
+        "Практичним результатом роботи стало створення програмного "
+        "застосунку для порівняння методів класифікації на сучасних "
+        "відкритих наборах даних. Реалізована система підтримує "
+        "завантаження датасетів, навчання дванадцяти моделей у єдиному "
+        "циклі, поетапний перегляд ходу експериментів і візуалізацію "
+        "отриманих метрик. У програмі використано власну реалізацію "
+        "GAM-класифікатора на основі B-сплайнів та власну реалізацію "
+        "розширеного CMA-ES зі сумішами нормальних розподілів і "
+        "EM-оновленням параметрів. Застосунок забезпечує графічне "
+        "відображення метрик, матриць плутанини, ROC-кривих і кривих "
+        "збіжності з можливістю інтерактивної взаємодії користувача через "
+        "веб-дашборд.")
 
     _p(doc,
-        "Об'єктом дослідження є методи класифікації табличних даних, "
-        "предметом — порівняльна ефективність базових алгоритмів "
-        "машинного навчання та модифікацій CMA-ES (класичної і "
-        "розширеної версії зі сумішами нормальних розподілів) у задачах "
-        "бінарної і мультикласової класифікації.")
-
-    _p(doc,
-        "Мета роботи — реалізувати, експериментально порівняти й "
-        "обґрунтувати область застосовності розширеного алгоритму "
-        "CMA-ES у задачах класифікації відносно як класичних "
-        "градієнтних методів навчання, так і базового варіанту CMA-ES.")
-
-    _p(doc,
-        "У першому розділі викладено теоретичні основи узагальнених "
-        "адитивних моделей (GAM): базисне представлення гладких функцій, "
-        "B-сплайни, параметри згладжування, функції зв'язку і сімейства "
-        "розподілів. У другому розділі розглянуто математичну модель "
-        "алгоритму CMA-ES, механізми адаптації коваріаційної матриці та "
-        "самоадаптації масштабу пошуку. У третьому розділі описано "
-        "програмну реалізацію — модуль classification_cma_es мовою "
-        "Python, побудований навколо екосистеми scikit-learn, MLflow і "
-        "Streamlit, з власноруч написаними з нуля реалізаціями "
-        "GAM-класифікатора і розширеного варіанту CMA-ES зі сумішами "
-        "розподілів. У четвертому розділі наведено результати "
-        "експериментального порівняння дванадцяти моделей класифікації "
-        "на трьох сучасних відкритих датасетах: PhiUSIIL Phishing URL "
-        "Dataset (UCI ID 967, 2024), Steel Plate Defects (UCI ID 198) "
-        "та Default of Credit Card Clients (UCI ID 350).")
-
-    _p(doc,
-        "Основні результати роботи. Емпірично підтверджено, що "
-        "автоматичний підбір гіперпараметрів за допомогою CMA-ES "
-        "стабільно покращує якість базових класифікаторів на всіх трьох "
-        "обраних задачах. GAM-класифікатор, реалізований у роботі через "
-        "B-сплайнове перетворення ознак з наступною логістичною "
-        "регресією, на двох із трьох датасетів увійшов до групи "
-        "найкращих моделей за F1-score. Розширений варіант CMA-ES зі "
-        "сумішами розподілів на незбалансованій задачі прогнозування "
-        "дефолту забезпечив помітне зростання F1-score порівняно з "
-        "класичним варіантом алгоритму. У процесі реалізації виявлено "
-        "і програмно усунено технічний дефект класичного EM-оновлення "
-        "коваріаційних матриць — передчасний колапс дисперсії на "
-        "унімодальних задачах — шляхом введення коефіцієнта "
-        "момент-усереднення за аналогією з rank-µ оновленням "
-        "стандартного CMA-ES.")
-
-    _p(doc,
-        "Практичне значення роботи полягає у створенні відкритого "
-        "програмного модуля, придатного для подальших порівняльних "
-        "досліджень у галузі класифікації, та у демонстрації подвійної "
-        "ролі алгоритму CMA-ES — як інструменту оптимізації параметрів "
-        "моделі і як автоматичного тюнера гіперпараметрів.")
-
-    _p(doc,
-        "Робота складається з анотації, змісту, чотирьох розділів, "
-        "загальних висновків і списку використаних джерел. Загальний "
-        "обсяг — 70 сторінок основного тексту. Робота містить 10 "
-        "рисунків, 5 таблиць, 8 пронумерованих формул та список "
-        "використаних джерел із 13 найменувань.")
+        "Програмний продукт розроблено мовою Python із використанням "
+        "бібліотек scikit-learn, NumPy, pandas, MLflow і Streamlit. "
+        "Проведене тестування підтвердило коректність роботи програми "
+        "та відповідність поставленим функціональним вимогам.")
 
     p = doc.add_paragraph()
     pf = p.paragraph_format
@@ -1593,10 +1361,62 @@ def add_annotation(doc) -> None:
     r1 = p.add_run("Ключові слова: ")
     _set_run(r1, size=14, bold=True)
     r2 = p.add_run(
-        "машинне навчання, класифікація, узагальнені адитивні моделі, "
-        "GAM, B-сплайни, алгоритм адаптації коваріаційної матриці, "
-        "CMA-ES, безградієнтна оптимізація, суміш нормальних розподілів, "
-        "EM-алгоритм, підбір гіперпараметрів.")
+        "класифікація, узагальнені адитивні моделі, GAM, B-сплайни, "
+        "алгоритм адаптації коваріаційної матриці, CMA-ES, безградієнтна "
+        "оптимізація, суміш нормальних розподілів, EM-алгоритм, підбір "
+        "гіперпараметрів, Python, scikit-learn, MLflow, Streamlit.")
+    _set_run(r2, size=14)
+
+    _page_break(doc)
+
+    _h(doc, "ABSTRACT", level=1)
+
+    _p(doc,
+        "The thesis investigates the application of generalized additive "
+        "models and an extended variant of the Covariance Matrix "
+        "Adaptation Evolution Strategy (CMA-ES) to classification "
+        "problems on tabular data. Particular attention is paid to the "
+        "construction and comparative analysis of classification methods "
+        "while taking into account multiple quality criteria, including "
+        "accuracy, F1-score and the area under the ROC curve. The study "
+        "examines approaches to gradient-free training of neural network "
+        "weights and to automatic hyperparameter tuning of conventional "
+        "classifiers using both the classical and the extended variants "
+        "of CMA-ES.")
+
+    _p(doc,
+        "As a practical result of the research, a software application "
+        "for comparing classification methods on modern open datasets "
+        "was developed. The implemented system supports dataset loading, "
+        "training of twelve models within a single pipeline, step-by-step "
+        "visualization of experiment progress and graphical "
+        "representation of the obtained metrics. The application includes "
+        "an in-house implementation of a GAM classifier based on "
+        "B-splines and an in-house implementation of the extended CMA-ES "
+        "with mixtures of normal distributions and EM-based parameter "
+        "updates. The developed software provides interactive "
+        "visualization of metrics, confusion matrices, ROC curves and "
+        "convergence curves through a web dashboard.")
+
+    _p(doc,
+        "The software product was implemented in Python using the "
+        "scikit-learn, NumPy, pandas, MLflow and Streamlit libraries. "
+        "Testing confirmed the correctness of the program operation and "
+        "its compliance with the specified functional requirements.")
+
+    p = doc.add_paragraph()
+    pf = p.paragraph_format
+    pf.first_line_indent = Cm(1.25)
+    pf.space_after = Pt(6)
+    pf.line_spacing = 1.5
+    r1 = p.add_run("Keywords: ")
+    _set_run(r1, size=14, bold=True)
+    r2 = p.add_run(
+        "classification, generalized additive models, GAM, B-splines, "
+        "covariance matrix adaptation evolution strategy, CMA-ES, "
+        "gradient-free optimization, mixture of normal distributions, "
+        "EM algorithm, hyperparameter tuning, Python, scikit-learn, "
+        "MLflow, Streamlit.")
     _set_run(r2, size=14)
 
     _page_break(doc)
