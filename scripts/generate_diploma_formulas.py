@@ -85,6 +85,89 @@ def main() -> int:
          r"$C^{(t+1)} = (1 - \mathrm{cov\_lr}) \cdot C^{(t)} + "
          r"\mathrm{cov\_lr} \cdot C^{(t)}_{\mathrm{EM}}$",
          1.0),
+
+        # ----- Формули розділу 1 -----
+
+        # (1.1) Адитивна модель
+        ("formula_1_1_additive.png",
+         r"$y = \beta_0 + \sum_{i=1}^{n} f_i(x_i) + \varepsilon$",
+         1.0),
+
+        # (1.2) Лінійна регресія
+        ("formula_1_2_linear.png",
+         r"$y = \beta_0 + \beta_1 x_1 + \beta_2 x_2 + \ldots + "
+         r"\beta_n x_n + \varepsilon$",
+         1.0),
+
+        # (1.3) GAM із функцією зв'язку
+        ("formula_1_3_gam_link.png",
+         r"$g(\mathbb{E}[y]) = \beta_0 + \sum_{i=1}^{n} f_i(x_i)$",
+         1.0),
+
+        # (1.4) Базисне представлення
+        ("formula_1_4_basis.png",
+         r"$f(x) = \sum_{j=1}^{k} \beta_j \, B_j(x)$",
+         1.0),
+
+        # (1.5) Поліноміальне базисне представлення
+        ("formula_1_5_poly.png",
+         r"$f(x) = \beta_0 + \beta_1 x + \beta_2 x^2 + \ldots + "
+         r"\beta_n x^n$",
+         1.0),
+
+        # (1.6) Функція оптимізації GAM
+        ("formula_1_6_loss.png",
+         r"$\mathcal{L} = \mathrm{RSS} + \lambda \int "
+         r"\left(f''(x)\right)^2 \, dx$",
+         1.0),
+
+        # (1.7) Тотожна функція зв'язку
+        ("formula_1_7_identity.png",
+         r"$g(y) = y$",
+         0.9),
+
+        # (1.8) Логарифмічна функція зв'язку
+        ("formula_1_8_log.png",
+         r"$g(y) = \log y$",
+         0.9),
+
+        # (1.9) Логіт-функція
+        ("formula_1_9_logit.png",
+         r"$g(y) = \log \frac{y}{1 - y}$",
+         1.2),
+
+        # ----- Формули розділу 2 -----
+
+        # (2.1) CMA-ES sample (розподіл)
+        ("formula_2_1_sample.png",
+         r"$x_k^{(g+1)} \sim m^{(g)} + \sigma^{(g)} \, "
+         r"\mathcal{N}(0, C^{(g)})$",
+         1.0),
+
+        # (2.2) CMA-ES sample (через випадковий вектор)
+        ("formula_2_2_sample2.png",
+         r"$x_k^{(g+1)} = m^{(g)} + \sigma^{(g)} \, z_k^{(g+1)}$",
+         1.0),
+
+        # (2.3) Оновлення середнього
+        ("formula_2_3_mean.png",
+         r"$m^{(g+1)} = \sum_{i=1}^{\mu} w_i \, x_{i:\lambda}^{(g+1)}$",
+         1.0),
+
+        # (2.4) Оновлення коваріаційної матриці
+        ("formula_2_4_cov.png",
+         r"$C^{(g+1)} = (1 - c_1 - c_\mu) C^{(g)} + "
+         r"c_1 \, p_c p_c^{\mathrm{T}} + "
+         r"c_\mu \sum_{i=1}^{\mu} w_i \, y_i y_i^{\mathrm{T}}$",
+         1.0),
+
+        # (2.5) Оновлення масштабу пошуку
+        ("formula_2_5_sigma.png",
+         r"$\sigma^{(g+1)} = \sigma^{(g)} \, "
+         r"\exp\!\left(\frac{c_\sigma}{d_\sigma} \left("
+         r"\frac{\|p_\sigma\|}{\mathbb{E}\|\mathcal{N}(0,I)\|} - 1"
+         r"\right)\right)$",
+         1.2),
     ]
 
     for filename, text, h in formulas:

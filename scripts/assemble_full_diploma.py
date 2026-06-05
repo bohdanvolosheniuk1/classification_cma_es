@@ -30,6 +30,7 @@ from docxcompose.composer import Composer
 
 from generate_diploma_sections import (
     add_annotation,
+    add_appendix,
     add_bibliography,
     add_conclusions,
     add_introduction,
@@ -43,6 +44,7 @@ DIPLOMA_PATH = REPO_ROOT.parent / "диплом 1.docx"
 BACKUP_PATH = REPO_ROOT.parent / "диплом 1_BACKUP_до_інтеграції.docx"
 MERGED_PATH = REPO_ROOT.parent / "диплом 1_BACKUP_merged.docx"
 POLISHED_PATH = REPO_ROOT.parent / "диплом 1_BACKUP_polished.docx"
+FINAL_BACKUP_PATH = REPO_ROOT.parent / "диплом 1_BACKUP_final.docx"
 
 
 def _make_blank_doc() -> Document:
@@ -81,8 +83,10 @@ def main() -> int:
         front_doc.save(str(front_path))
 
         # 2. Оригінал теоретичної частини (розділи 1 і 2 Богдана).
-        # Пріоритет: polished > merged > оригінал.
-        if POLISHED_PATH.exists():
+        # Пріоритет: final (з PNG-формулами) > polished > merged > оригінал.
+        if FINAL_BACKUP_PATH.exists():
+            source = FINAL_BACKUP_PATH
+        elif POLISHED_PATH.exists():
             source = POLISHED_PATH
         elif MERGED_PATH.exists():
             source = MERGED_PATH
@@ -92,13 +96,14 @@ def main() -> int:
         original_path = tmp / "02_original.docx"
         original_path.write_bytes(source.read_bytes())
 
-        # 3. Розділи 3, 4 + загальні висновки + бібліографія
-        print("Готую розділи 3, 4, висновки і список літератури...")
+        # 3. Розділи 3, 4 + загальні висновки + бібліографія + додаток
+        print("Готую розділи 3, 4, висновки, список літератури і додаток...")
         sections_doc = _make_blank_doc()
         sections_doc.add_paragraph()
         add_sections_to(sections_doc)
         add_conclusions(sections_doc)
         add_bibliography(sections_doc)
+        add_appendix(sections_doc)
         sections_path = tmp / "03_sections.docx"
         sections_doc.save(str(sections_path))
 

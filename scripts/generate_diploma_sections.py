@@ -1625,6 +1625,127 @@ def add_conclusions(doc) -> None:
 
 
 # ============================================================================
+# Додаток А — лістинг основних модулів програми
+
+CLASSIFIERS_DIR = REPO_ROOT / "classifiers"
+
+
+def _code_block(doc, code: str, *, font_size: int = 9):
+    """Вставляє блок коду моноширним шрифтом без переносу слів."""
+    for line in code.splitlines():
+        p = doc.add_paragraph()
+        pf = p.paragraph_format
+        pf.first_line_indent = Cm(0)
+        pf.left_indent = Cm(0)
+        pf.space_before = Pt(0)
+        pf.space_after = Pt(0)
+        pf.line_spacing = 1.15
+        run = p.add_run(line if line else " ")
+        run.font.name = "Consolas"
+        run.font.size = Pt(font_size)
+        # Безпосередньо встановити шрифт через rFonts (щоб не злетіло
+        # на схід-азійських символах)
+        rpr = run._element.get_or_add_rPr()
+        rfonts = rpr.find(qn("w:rFonts"))
+        if rfonts is None:
+            rfonts = OxmlElement("w:rFonts")
+            rpr.append(rfonts)
+        rfonts.set(qn("w:ascii"), "Consolas")
+        rfonts.set(qn("w:hAnsi"), "Consolas")
+        rfonts.set(qn("w:cs"), "Consolas")
+
+
+def add_appendix(doc) -> None:
+    """Додає ДОДАТОК А — лістинг основних модулів програми."""
+    _page_break(doc)
+    _h(doc, "ДОДАТОК А", level=1)
+    _h(doc, "Лістинг основних модулів програми", level=2)
+
+    _p(doc,
+        "Повний вихідний код програмного модуля classification_cma_es "
+        "опубліковано у відкритому репозиторії GitHub за адресою:")
+
+    p_url = doc.add_paragraph()
+    p_url.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run = p_url.add_run("https://github.com/bohdanvolosheniuk1/classification_cma_es")
+    _set_run(run, size=12, bold=True)
+
+    _p(doc,
+        "Репозиторій містить усі модулі, що становлять реалізацію "
+        "практичної частини дипломної роботи, а саме:")
+
+    modules_overview = [
+        ("data.py", "завантаження датасетів з UCI ML Repository через "
+                    "пакет ucimlrepo із кешуванням на диск;"),
+        ("preprocessing.py", "препроцесинг даних — масштабування числових "
+                             "ознак, кодування категоріальних, заповнення "
+                             "пропусків;"),
+        ("models.py", "фабрики базових класифікаторів (LogReg, SVM, kNN, "
+                      "MLP) на основі scikit-learn;"),
+        ("gam.py", "власна реалізація GAM-класифікатора через B-сплайнове "
+                   "перетворення ознак з наступною логістичною регресією;"),
+        ("cma_es.py", "обгортка над пакетом cma (класичний CMA-ES) із "
+                      "уніфікованим інтерфейсом до оптимізатора;"),
+        ("mixture_cma_es.py", "власна з нуля реалізація розширеного "
+                              "CMA-ES зі сумішами нормальних розподілів "
+                              "та EM-оновленням параметрів;"),
+        ("cma_nn.py", "нейронна мережа, ваги якої навчаються "
+                      "безградієнтним методом CMA-ES (класичним чи "
+                      "розширеним);"),
+        ("hyperparam_tuning.py", "автоматичний підбір гіперпараметрів "
+                                 "базових моделей через CMA-ES — "
+                                 "виробляє моделі tuned_*;"),
+        ("crossval.py", "Stratified K-Fold перехресна валідація з "
+                        "паралельним виконанням фолдів;"),
+        ("metrics.py", "обчислення accuracy, F1-score (бінарного й "
+                       "weighted-усередненого) та ROC-AUC у бінарному "
+                       "та OvR-режимах;"),
+        ("tracking.py", "журналювання параметрів і метрик експериментів "
+                        "через MLflow;"),
+        ("pipeline.py", "єдина точка входу — функція run_pipeline, що "
+                        "виконує повний цикл одного експерименту."),
+    ]
+    for name, descr in modules_overview:
+        p = doc.add_paragraph()
+        pf = p.paragraph_format
+        pf.left_indent = Cm(0.75)
+        pf.first_line_indent = Cm(-0.5)
+        pf.space_after = Pt(2)
+        pf.line_spacing = 1.4
+        r1 = p.add_run("— ")
+        _set_run(r1, size=14)
+        r2 = p.add_run(name)
+        _set_run(r2, size=14, bold=True)
+        r3 = p.add_run(f" — {descr}")
+        _set_run(r3, size=14)
+
+    _p(doc,
+        "Нижче наведено повний текст двох ключових модулів, реалізованих "
+        "автором самостійно: GAM-класифікатора та розширеного CMA-ES зі "
+        "сумішами розподілів.")
+
+    # ----- gam.py -----
+    _h(doc, "А.1. Модуль gam.py — GAM-класифікатор", level=2)
+    gam_path = CLASSIFIERS_DIR / "gam.py"
+    if gam_path.exists():
+        code = gam_path.read_text(encoding="utf-8")
+        _code_block(doc, code, font_size=9)
+    else:
+        _p(doc, f"[Файл {gam_path.name} недоступний]", italic=True)
+
+    # ----- mixture_cma_es.py -----
+    _page_break(doc)
+    _h(doc, "А.2. Модуль mixture_cma_es.py — розширений CMA-ES зі сумішами",
+       level=2)
+    mix_path = CLASSIFIERS_DIR / "mixture_cma_es.py"
+    if mix_path.exists():
+        code = mix_path.read_text(encoding="utf-8")
+        _code_block(doc, code, font_size=8)
+    else:
+        _p(doc, f"[Файл {mix_path.name} недоступний]", italic=True)
+
+
+# ============================================================================
 # Зміст усієї роботи
 
 def add_table_of_contents(doc) -> None:
@@ -1669,6 +1790,10 @@ def add_table_of_contents(doc) -> None:
         ("    Висновки до розділу 4", "66", False),
         ("ВИСНОВКИ", "68", True),
         ("СПИСОК ВИКОРИСТАНИХ ДЖЕРЕЛ", "70", True),
+        ("ДОДАТОК А. Лістинг основних модулів програми", "73", True),
+        ("    А.1. Модуль gam.py — GAM-класифікатор", "74", False),
+        ("    А.2. Модуль mixture_cma_es.py — розширений CMA-ES зі сумішами",
+         "77", False),
     ]
     for title, page, is_bold in items:
         p = doc.add_paragraph()
