@@ -15,6 +15,7 @@ LibreOffice, Word на Mac та при PDF-конвертації. Натомі�
 
 from __future__ import annotations
 
+import re
 import sys
 from copy import deepcopy
 from pathlib import Path
@@ -193,18 +194,73 @@ def _is_where_marker(text: str) -> bool:
     return t in ("де:", "де :")
 
 
-def _is_where_definition(text: str) -> bool:
-    """Чи це рядок-визначення змінної з '-' маркером."""
-    t = text.lstrip()
-    return t.startswith("-") or t.startswith("—") or t.startswith("–")
+# Випадок 1: "симв - опис" або "симв — опис" (з пробілом або без)
+_DEF_RE_FULL = re.compile(r"^\s*(\S.*?)\s*[-—–]\s*(.+?)\s*$")
+# Випадок 2: "- опис" (без символу — це продовження попереднього)
+_DEF_RE_NOSYM = re.compile(r"^\s*[-—–]\s*(.+?)\s*$")
 
 
-def _align_left(p) -> None:
-    """Вирівнює параграф на лівий край і прибирає first_line_indent."""
+def _looks_like_definition(text: str) -> bool:
+    """Параграф виглядає як визначення (з символом або без)."""
+    t = text.strip()
+    if not t:
+        return False
+    return bool(_DEF_RE_NOSYM.match(t) or _DEF_RE_FULL.match(t))
+
+
+def _bulletize_definition(p) -> bool:
+    """Перетворює визначення на буллет '• симв — опис' або '• опис'.
+
+    Поточний текст парситься на (symbol?, description). Параграф
+    очищується і збирається з буллетом, italic-символом (якщо є) та
+    звичайним описом. Уніфікує стиль із розд. 3-4.
+    """
+    text = p.text.strip().replace("\xa0", " ")
+    text = " ".join(text.split())  # схлопуємо множинні пробіли
+
+    symbol = ""
+    descr = ""
+    # Спочатку перевіряємо паттерн "- опис" (без символу)
+    if text.lstrip().startswith(("-", "—", "–")):
+        m = _DEF_RE_NOSYM.match(text)
+        if m:
+            descr = m.group(1).strip()
+    else:
+        # Інакше шукаємо повний паттерн "симв - опис"
+        m = _DEF_RE_FULL.match(text)
+        if m:
+            symbol = m.group(1).strip()
+            descr = m.group(2).strip()
+
+    if not descr:
+        return False
+
+    _clear_paragraph(p)
     pf = p.paragraph_format
     pf.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
-    pf.first_line_indent = Cm(0)
     pf.left_indent = Cm(0.75)
+    pf.first_line_indent = Cm(-0.5)
+    pf.space_after = Pt(3)
+    pf.line_spacing = 1.4
+
+    # буллет
+    r1 = p.add_run("•  ")
+    r1.font.name = "Times New Roman"
+    r1.font.size = Pt(14)
+    if symbol:
+        # символ у курсиві
+        r2 = p.add_run(symbol)
+        r2.font.name = "Times New Roman"
+        r2.font.size = Pt(14)
+        r2.italic = True
+        # тире і опис
+        r3 = p.add_run(f" — {descr}")
+    else:
+        # тільки опис
+        r3 = p.add_run(descr)
+    r3.font.name = "Times New Roman"
+    r3.font.size = Pt(14)
+    return True
 
 
 def _normalize_de_marker(p) -> bool:
@@ -274,10 +330,10 @@ def main() -> int:
             n_de_normalized += 1
             continue
 
-        # 4. Вирівняти рядки-визначення на лівий край
-        if _is_where_definition(text):
-            _align_left(p)
-            n_aligned += 1
+        # 4. Перебудувати рядки-визначення у формат "• симв — опис"
+        if _looks_like_definition(p.text):
+            if _bulletize_definition(p):
+                n_aligned += 1
 
     # 5. Видалити дублікати "Де:" — якщо два маркери підряд, залишаємо
     # тільки перший.
