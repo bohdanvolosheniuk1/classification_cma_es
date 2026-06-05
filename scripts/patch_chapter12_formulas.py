@@ -74,10 +74,77 @@ def _clear_paragraph(p) -> None:
 
 
 M_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/math}"
+W_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+
+
+# Mathematical italic Unicode → звичайна латиниця/грецька.
+# Word у Cambria Math рендерить ці гліфи як formula italic, але звичайний
+# Times New Roman їх часто не має. Робимо ASCII-конверсію.
+_MATH_ITALIC_MAP = {}
+# Latin A-Z (Math Italic): U+1D434..U+1D44D, A=U+1D434
+for i, ch in enumerate("ABCDEFGHIJKLMNOPQRSTUVWXYZ"):
+    _MATH_ITALIC_MAP[chr(0x1D434 + i)] = ch
+# Latin a-z: U+1D44E..U+1D467, a=U+1D44E, h missing → U+210E
+for i, ch in enumerate("abcdefghijklmnopqrstuvwxyz"):
+    if ch == 'h':
+        _MATH_ITALIC_MAP[chr(0x210E)] = 'h'
+    else:
+        _MATH_ITALIC_MAP[chr(0x1D44E + i)] = ch
+# Грецькі italic Math: U+1D6FC..U+1D71B (α..ω) — і ψ/ω
+_greek_italic_start = 0x1D6FC  # α
+_greek_lower = "αβγδεζηθικλμνξοπρςστυφχψω"
+for i, ch in enumerate(_greek_lower):
+    _MATH_ITALIC_MAP[chr(_greek_italic_start + i)] = ch
+# Math bold Greek upper U+1D6A8..U+1D6C2
+_greek_upper = "ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡϴΣΤΥΦΧΨΩ"
+_GREEK_ITAL_UPPER_START = 0x1D6E2  # Math italic Greek Cap A
+for i, ch in enumerate(_greek_upper):
+    _MATH_ITALIC_MAP[chr(_GREEK_ITAL_UPPER_START + i)] = ch
+# Math bold italic alternatives — поки що не покриваємо
+
+
+def _to_plain_text(s: str) -> str:
+    """Конвертує math-italic Unicode у звичайний текст."""
+    return "".join(_MATH_ITALIC_MAP.get(c, c) for c in s)
+
+
+def _collect_omml_text(elem) -> str:
+    """Збирає весь текст з усіх <m:t> всередині OMML-елемента."""
+    parts = []
+    for t_elem in elem.iter(qn("m:t")):
+        if t_elem.text:
+            parts.append(t_elem.text)
+    return "".join(parts)
+
+
+def _make_text_run(text: str, *, italic: bool = True, size_pt: int = 14):
+    """Створює <w:r>-елемент із заданим текстом (italic + Times New Roman)."""
+    r = OxmlElement("w:r")
+    rPr = OxmlElement("w:rPr")
+    rFonts = OxmlElement("w:rFonts")
+    rFonts.set(qn("w:ascii"), "Times New Roman")
+    rFonts.set(qn("w:hAnsi"), "Times New Roman")
+    rFonts.set(qn("w:cs"), "Times New Roman")
+    rPr.append(rFonts)
+    if italic:
+        i_elem = OxmlElement("w:i")
+        rPr.append(i_elem)
+    sz = OxmlElement("w:sz")
+    sz.set(qn("w:val"), str(size_pt * 2))
+    rPr.append(sz)
+    r.append(rPr)
+    t = OxmlElement("w:t")
+    t.set(qn("xml:space"), "preserve")
+    t.text = text
+    r.append(t)
+    return r
 
 
 def _strip_omml_keep_text(p) -> bool:
-    """Видаляє лише OMML-елементи (m:oMathPara, m:oMath), залишаючи w:r.
+    """Замість OMML-елементів вставляє звичайний w:r-текст з курсивом.
+
+    Тобто символи `𝛾`, `𝛽₀`, `𝑓ᵢ𝑥ᵢ` (math-italic Unicode, що погано
+    рендериться) перетворюються на звичайні `γ`, `β₀`, `fᵢxᵢ` у курсиві.
 
     Повертає True, якщо була принаймні одна модифікація.
     """
@@ -86,6 +153,14 @@ def _strip_omml_keep_text(p) -> bool:
     for child in list(p_elem):
         tag = child.tag
         if tag.startswith(M_NS):
+            # Витягуємо текст з OMML
+            text = _collect_omml_text(child)
+            plain = _to_plain_text(text)
+            if plain.strip():
+                # Створюємо звичайний run-текст і вставляємо ПЕРЕД OMML
+                new_r = _make_text_run(plain, italic=True, size_pt=14)
+                p_elem.insert(list(p_elem).index(child), new_r)
+            # Видаляємо OMML
             p_elem.remove(child)
             changed = True
     return changed

@@ -40,7 +40,7 @@ from generate_diploma_sections import (
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DIPLOMA_PATH = REPO_ROOT.parent / "диплом 1.docx"
+DIPLOMA_PATH = REPO_ROOT.parent / "випускна кваліфікаційна робота.docx"
 BACKUP_PATH = REPO_ROOT.parent / "диплом 1_BACKUP_до_інтеграції.docx"
 MERGED_PATH = REPO_ROOT.parent / "диплом 1_BACKUP_merged.docx"
 POLISHED_PATH = REPO_ROOT.parent / "диплом 1_BACKUP_polished.docx"
