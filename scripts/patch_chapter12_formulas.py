@@ -73,6 +73,24 @@ def _clear_paragraph(p) -> None:
             p_elem.remove(child)
 
 
+M_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/math}"
+
+
+def _strip_omml_keep_text(p) -> bool:
+    """Видаляє лише OMML-елементи (m:oMathPara, m:oMath), залишаючи w:r.
+
+    Повертає True, якщо була принаймні одна модифікація.
+    """
+    p_elem = p._p
+    changed = False
+    for child in list(p_elem):
+        tag = child.tag
+        if tag.startswith(M_NS):
+            p_elem.remove(child)
+            changed = True
+    return changed
+
+
 def _insert_png_with_number(p, png_path: Path, number: str,
                             width_cm: float) -> None:
     """Перетворює параграф на: [PNG по центру] [tab] [номер праворуч]."""
@@ -114,6 +132,35 @@ def _align_left(p) -> None:
     pf.left_indent = Cm(0.75)
 
 
+def _normalize_de_marker(p) -> bool:
+    """Нормалізує текст параграфа 'Де:' / 'де:' до жирного 'Де:'.
+
+    Повертає True, якщо параграф був маркером (для подальшого dedup).
+    """
+    t = p.text.strip().lower()
+    if t not in ("де:", "де :"):
+        return False
+    # Замість усього вмісту — єдиний жирний run "Де:"
+    _clear_paragraph(p)
+    pf = p.paragraph_format
+    pf.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
+    pf.first_line_indent = Cm(0)
+    pf.left_indent = Cm(0)
+    pf.space_before = Pt(4)
+    pf.space_after = Pt(2)
+    run = p.add_run("Де:")
+    run.bold = True
+    run.font.name = "Times New Roman"
+    run.font.size = Pt(14)
+    return True
+
+
+def _delete_paragraph(p) -> None:
+    """Повністю видаляє параграф з body."""
+    p_elem = p._p
+    p_elem.getparent().remove(p_elem)
+
+
 def main() -> int:
     if not SRC.exists():
         print(f"ПОМИЛКА: {SRC} не знайдено", file=sys.stderr)
@@ -123,8 +170,9 @@ def main() -> int:
     paragraphs = list(doc.paragraphs)
 
     n_replaced = 0
-    n_removed = 0
+    n_stripped = 0
     n_aligned = 0
+    n_de_normalized = 0
 
     for i, p in enumerate(paragraphs):
         text = p.text.strip()
@@ -140,21 +188,39 @@ def main() -> int:
             n_replaced += 1
             continue
 
-        # 2. Видалити решту OMML-параграфів (короткі змінні в "Де:")
-        if _para_has_block_formula(p):
-            _clear_paragraph(p)
-            n_removed += 1
+        # 2. У решті OMML-параграфів видаляти ЛИШЕ OMML-елементи,
+        # текстові w:r-руни ("- залежна змінна," тощо) лишаються.
+        if "<m:oMath" in p._p.xml:
+            if _strip_omml_keep_text(p):
+                n_stripped += 1
+
+        # 3. Нормалізувати "Де:"-маркери (жирний + лівий край)
+        if _normalize_de_marker(p):
+            n_de_normalized += 1
             continue
 
-        # 3. Вирівняти "Де:"-блоки та визначення на лівий край
-        if _is_where_marker(text) or _is_where_definition(text):
+        # 4. Вирівняти рядки-визначення на лівий край
+        if _is_where_definition(text):
             _align_left(p)
             n_aligned += 1
 
+    # 5. Видалити дублікати "Де:" — якщо два маркери підряд, залишаємо
+    # тільки перший.
+    paragraphs = list(doc.paragraphs)
+    n_duplicates = 0
+    for i in range(len(paragraphs) - 1, 0, -1):
+        cur = paragraphs[i].text.strip().lower()
+        prev = paragraphs[i - 1].text.strip().lower()
+        if cur in ("де:", "де :") and prev in ("де:", "де :"):
+            _delete_paragraph(paragraphs[i])
+            n_duplicates += 1
+
     doc.save(DST)
-    print(f"Замінено формул на PNG : {n_replaced}")
-    print(f"Прибрано порожніх OMML : {n_removed}")
-    print(f"Вирівняно 'Де:'-рядків : {n_aligned}")
+    print(f"Замінено формул на PNG     : {n_replaced}")
+    print(f"OMML-руни прибрано (текст залишено): {n_stripped}")
+    print(f"'Де:' нормалізовано (жирний): {n_de_normalized}")
+    print(f"Дублікатів 'Де:' видалено   : {n_duplicates}")
+    print(f"Визначень вирівняно лівим   : {n_aligned}")
     print(f"Збережено: {DST.name} ({DST.stat().st_size // 1024} KB)")
     return 0
 
