@@ -16,7 +16,8 @@ import sys
 from pathlib import Path
 
 from docx import Document
-from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT, WD_TAB_LEADER
+from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 from docx.shared import Cm, Pt
@@ -52,8 +53,8 @@ def _set_run(run, *, size=14, bold=False, italic=False,
 def _p(doc, text, *, size=14, bold=False, italic=False, align=None,
        indent=Cm(1.25), space=Pt(6)):
     p = doc.add_paragraph()
-    if align is not None:
-        p.alignment = align
+    # За замовчуванням — вирівнювання по ширині (justify), якщо не задано інше
+    p.alignment = align if align is not None else WD_ALIGN_PARAGRAPH.JUSTIFY
     pf = p.paragraph_format
     if indent is not None:
         pf.first_line_indent = indent
@@ -61,21 +62,28 @@ def _p(doc, text, *, size=14, bold=False, italic=False, align=None,
     pf.line_spacing = 1.5
     run = p.add_run(text)
     _set_run(run, size=size, bold=bold, italic=italic)
+    return p
 
 
 def _h(doc, text, level=1):
+    """Заголовок: жирним по центру. level=1 — більший відступ і page-break."""
     p = doc.add_paragraph()
     pf = p.paragraph_format
     pf.space_before = Pt(18 if level == 1 else 12)
     pf.space_after = Pt(12 if level == 1 else 8)
     pf.keep_with_next = True
     pf.line_spacing = 1.5
-    p.alignment = WD_ALIGN_PARAGRAPH.CENTER if level == 1 else WD_ALIGN_PARAGRAPH.LEFT
+    # Усі заголовки тепер по центру (вимога куратора)
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run = p.add_run(text)
     _set_run(run, size=14, bold=True)
+    return p
 
 
-def _table(doc, headers, rows, widths=None):
+def _table(doc, headers, rows, widths=None, *, new_page=True):
+    """Таблиця по центру, опційно з нової сторінки."""
+    if new_page:
+        _page_break(doc)
     table = doc.add_table(rows=1 + len(rows), cols=len(headers))
     try:
         table.style = "Light Grid"
@@ -84,6 +92,8 @@ def _table(doc, headers, rows, widths=None):
             table.style = "Table Grid"
         except KeyError:
             pass
+    # вирівняти таблицю по центру сторінки
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
     for i, h in enumerate(headers):
         cell = table.rows[0].cells[i]
         cell.text = ""
@@ -273,6 +283,7 @@ def add_sections_to(doc) -> None:
     # =====================================================================
     # РОЗДІЛ 3
     # =====================================================================
+    _page_break(doc)
     _h(doc, "РОЗДІЛ 3. ПРОГРАМНА РЕАЛІЗАЦІЯ", level=1)
 
     # ---- 3.1 ----
@@ -808,6 +819,7 @@ def add_sections_to(doc) -> None:
         "параметрів дали найкращий результат.")
 
     # ---- Висновки до розділу 3 ----
+    _page_break(doc)
     _h(doc, "Висновки до розділу 3", level=2)
     _p(doc,
         "У розділі описано програмну реалізацію методів класифікації, "
@@ -1203,6 +1215,7 @@ def add_sections_to(doc) -> None:
         "із потенційно мультимодальним ландшафтом цільової функції.")
 
     # ---- Висновки до розділу 4 ----
+    _page_break(doc)
     _h(doc, "Висновки до розділу 4", level=2)
     _p(doc,
         "У розділі проведено експериментальне порівняння дванадцяти "
@@ -1240,66 +1253,74 @@ def add_bibliography(doc) -> None:
     _page_break(doc)
     _h(doc, "СПИСОК ВИКОРИСТАНИХ ДЖЕРЕЛ", level=1)
 
+    # Бібліографічний опис за ДСТУ 8302:2015. Відмінності від попереднього
+    # стандарту: крапки і коми замість тире "—", без "//" для статей,
+    # рік після видавництва крапкою, кількість сторінок з малою "с." /
+    # "p.", електронні ресурси з зазначенням URL та дати звернення.
     refs = [
-        "Hastie T., Tibshirani R. Generalized Additive Models. — "
-        "London: Chapman & Hall, 1990. — 352 p.",
+        "Hastie T., Tibshirani R. Generalized Additive Models. London: "
+        "Chapman & Hall, 1990. 352 p.",
 
-        "Wood S. N. Generalized Additive Models: An Introduction with "
-        "R. — 2nd ed. — Boca Raton: CRC Press, 2017. — 476 p.",
+        "Wood S. N. Generalized Additive Models: An Introduction with R. "
+        "2nd ed. Boca Raton: CRC Press, 2017. 476 p.",
 
         "Hansen N., Ostermeier A. Adapting Arbitrary Normal Mutation "
         "Distributions in Evolution Strategies: The Covariance Matrix "
-        "Adaptation // Proc. IEEE Int. Conf. on Evolutionary "
-        "Computation. — 1996. — P. 312–317.",
+        "Adaptation. Proceedings of IEEE International Conference on "
+        "Evolutionary Computation. 1996. P. 312–317.",
 
-        "Hansen N. The CMA Evolution Strategy: A Tutorial. — arXiv "
-        "preprint arXiv:1604.00772. — 2016. — 39 p.",
+        "Hansen N. The CMA Evolution Strategy: A Tutorial. arXiv preprint "
+        "arXiv:1604.00772. 2016. 39 p.",
 
-        "Літвінчук Ю.А. Побудова самоадаптивних алгоритмів на основі "
-        "нейронних мереж: дис. ... доктора філософії: 113 / "
-        "Чернівецький національний університет імені Юрія Федьковича. "
-        "— Чернівці, 2024. — 165 с.",
+        "Літвінчук Ю. А. Побудова самоадаптивних алгоритмів на основі "
+        "нейронних мереж: дис. ... доктора філософії: 113. Чернівецький "
+        "національний університет імені Юрія Федьковича. Чернівці, 2024. "
+        "165 с.",
 
         "Pedregosa F., Varoquaux G., Gramfort A. et al. Scikit-learn: "
-        "Machine Learning in Python // Journal of Machine Learning "
-        "Research. — 2011. — Vol. 12. — P. 2825–2830.",
+        "Machine Learning in Python. Journal of Machine Learning "
+        "Research. 2011. Vol. 12. P. 2825–2830.",
 
         "Chen A., Chow A., Davidson A. et al. Developments in MLflow: "
-        "A System to Accelerate the Machine Learning Lifecycle // "
+        "A System to Accelerate the Machine Learning Lifecycle. "
         "Proceedings of the Fourth International Workshop on Data "
-        "Management for End-to-End Machine Learning (DEEM'20). — "
-        "ACM, 2020. — P. 1–4.",
+        "Management for End-to-End Machine Learning (DEEM'20). ACM, "
+        "2020. P. 1–4.",
 
-        "Streamlit Inc. Streamlit Documentation [Електронний ресурс]. "
-        "— Режим доступу: https://docs.streamlit.io",
+        "Streamlit Inc. Streamlit Documentation. URL: "
+        "https://docs.streamlit.io (дата звернення: 10.06.2026).",
 
-        "Prasad A. K. et al. PhiUSIIL: A diverse security profile "
-        "empowered phishing URL detection framework based on similarity "
-        "index and incremental learning // Computers & Security. — "
-        "Vol. 136. — 2024. — Article 103605. — Доступ через UCI "
-        "Machine Learning Repository, ID 967.",
+        "Prasad A. K., Chandra S., Singh M. et al. PhiUSIIL: A diverse "
+        "security profile empowered phishing URL detection framework "
+        "based on similarity index and incremental learning. Computers "
+        "& Security. 2024. Vol. 136. Article 103605. URL: "
+        "https://archive.ics.uci.edu/dataset/967 (дата звернення: "
+        "10.06.2026).",
 
-        "Buscema M., Terzi S., Tastle W. A New Meta-Classifier // "
-        "Annual Meeting of the North American Fuzzy Information "
-        "Processing Society (NAFIPS). — 2010. Steel Plates Faults "
-        "Dataset, UCI Machine Learning Repository, ID 198.",
+        "Buscema M., Terzi S., Tastle W. A New Meta-Classifier. Annual "
+        "Meeting of the North American Fuzzy Information Processing "
+        "Society (NAFIPS). 2010. P. 1–7. URL: "
+        "https://archive.ics.uci.edu/dataset/198 (дата звернення: "
+        "10.06.2026).",
 
         "Yeh I.-C., Lien C. The comparisons of data mining techniques "
         "for the predictive accuracy of probability of default of "
-        "credit card clients // Expert Systems with Applications. — "
-        "2009. — Vol. 36, No. 2. — P. 2473–2480. Default of Credit "
-        "Card Clients Dataset, UCI Machine Learning Repository, ID 350.",
+        "credit card clients. Expert Systems with Applications. 2009. "
+        "Vol. 36, No. 2. P. 2473–2480. URL: "
+        "https://archive.ics.uci.edu/dataset/350 (дата звернення: "
+        "10.06.2026).",
 
-        "Hansen N. The cma Python package [Електронний ресурс]. — "
-        "Режим доступу: https://github.com/CMA-ES/pycma",
+        "Hansen N. The cma Python package. URL: "
+        "https://github.com/CMA-ES/pycma (дата звернення: 10.06.2026).",
 
         "Sklearn Developers. SplineTransformer — sklearn.preprocessing "
-        "documentation [Електронний ресурс]. — Режим доступу: "
-        "https://scikit-learn.org/stable/modules/generated/sklearn."
-        "preprocessing.SplineTransformer.html",
+        "documentation. URL: https://scikit-learn.org/stable/modules/"
+        "generated/sklearn.preprocessing.SplineTransformer.html (дата "
+        "звернення: 10.06.2026).",
     ]
     for i, ref in enumerate(refs, start=1):
         p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
         pf = p.paragraph_format
         pf.left_indent = Cm(1.0)
         pf.first_line_indent = Cm(-1.0)
@@ -1312,12 +1333,26 @@ def add_bibliography(doc) -> None:
 # ============================================================================
 # Анотація
 
-def add_annotation(doc) -> None:
-    """Додає АНОТАЦІЮ на початку дипломної роботи.
+def _keywords_paragraph(doc, *, lead: str, words: str):
+    """Параграф 'Ключові слова: ...' — увесь курсивом, justify."""
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    pf = p.paragraph_format
+    pf.first_line_indent = Cm(1.25)
+    pf.space_after = Pt(6)
+    pf.line_spacing = 1.5
+    r1 = p.add_run(lead)
+    _set_run(r1, size=14, bold=True, italic=True)
+    r2 = p.add_run(words)
+    _set_run(r2, size=14, italic=True)
 
-    Структура повторює зразок з ШаблонДипломна.docx: два абзаци
-    української анотації + рядок ключових слів, далі ABSTRACT з двома
-    абзацами + Keywords. Зміст підставлено під тему Богдана.
+
+def add_annotation(doc) -> None:
+    """Додає АНОТАЦІЮ та ABSTRACT на початку дипломної роботи.
+
+    Структура повторює зразок з ШаблонДипломна.docx: дві анотації йдуть
+    одна за одною на тій самій сторінці (без page-break), потім окремий
+    блок декларації академічної доброчесності з підписом.
     """
     _h(doc, "АНОТАЦІЯ", level=1)
 
@@ -1353,22 +1388,15 @@ def add_annotation(doc) -> None:
         "Проведене тестування підтвердило коректність роботи програми "
         "та відповідність поставленим функціональним вимогам.")
 
-    p = doc.add_paragraph()
-    pf = p.paragraph_format
-    pf.first_line_indent = Cm(1.25)
-    pf.space_after = Pt(6)
-    pf.line_spacing = 1.5
-    r1 = p.add_run("Ключові слова: ")
-    _set_run(r1, size=14, bold=True)
-    r2 = p.add_run(
-        "класифікація, узагальнені адитивні моделі, GAM, B-сплайни, "
-        "алгоритм адаптації коваріаційної матриці, CMA-ES, безградієнтна "
-        "оптимізація, суміш нормальних розподілів, EM-алгоритм, підбір "
-        "гіперпараметрів, Python, scikit-learn, MLflow, Streamlit.")
-    _set_run(r2, size=14)
+    _keywords_paragraph(doc,
+        lead="Ключові слова: ",
+        words=("класифікація, узагальнені адитивні моделі, GAM, B-сплайни, "
+               "алгоритм адаптації коваріаційної матриці, CMA-ES, "
+               "безградієнтна оптимізація, суміш нормальних розподілів, "
+               "EM-алгоритм, підбір гіперпараметрів, Python, scikit-learn, "
+               "MLflow, Streamlit."))
 
-    _page_break(doc)
-
+    # ABSTRACT йде ОДРАЗУ після укр.анотації, без розриву сторінки
     _h(doc, "ABSTRACT", level=1)
 
     _p(doc,
@@ -1404,20 +1432,34 @@ def add_annotation(doc) -> None:
         "Testing confirmed the correctness of the program operation and "
         "its compliance with the specified functional requirements.")
 
+    _keywords_paragraph(doc,
+        lead="Keywords: ",
+        words=("classification, generalized additive models, GAM, "
+               "B-splines, covariance matrix adaptation evolution "
+               "strategy, CMA-ES, gradient-free optimization, mixture of "
+               "normal distributions, EM algorithm, hyperparameter "
+               "tuning, Python, scikit-learn, MLflow, Streamlit."))
+
+    # ----- Декларація академічної доброчесності -----
     p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     pf = p.paragraph_format
     pf.first_line_indent = Cm(1.25)
+    pf.space_before = Pt(24)
     pf.space_after = Pt(6)
     pf.line_spacing = 1.5
-    r1 = p.add_run("Keywords: ")
-    _set_run(r1, size=14, bold=True)
-    r2 = p.add_run(
-        "classification, generalized additive models, GAM, B-splines, "
-        "covariance matrix adaptation evolution strategy, CMA-ES, "
-        "gradient-free optimization, mixture of normal distributions, "
-        "EM algorithm, hyperparameter tuning, Python, scikit-learn, "
-        "MLflow, Streamlit.")
-    _set_run(r2, size=14)
+    run = p.add_run(
+        "Випускна кваліфікаційна робота містить результати власних "
+        "досліджень. Використання ідей, результатів і текстів наукових "
+        "досліджень інших авторів мають посилання на відповідне джерело.")
+    _set_run(run, size=14, italic=True)
+
+    # підпис праворуч
+    sign = doc.add_paragraph()
+    sign.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    sign.paragraph_format.space_before = Pt(36)
+    run_sign = sign.add_run("__________________   Б. А. Волошенюк")
+    _set_run(run_sign, size=14)
 
     _page_break(doc)
 
@@ -1798,9 +1840,14 @@ def add_table_of_contents(doc) -> None:
     for title, page, is_bold in items:
         p = doc.add_paragraph()
         pf = p.paragraph_format
-        pf.tab_stops.add_tab_stop(Cm(16), WD_ALIGN_PARAGRAPH.RIGHT)
+        # Tab з крапочками (dot leader) на правому полі — номера сторінок
+        # вирівнюються в один стовпчик з лідерами '......'
+        pf.tab_stops.add_tab_stop(
+            Cm(16), WD_TAB_ALIGNMENT.RIGHT, WD_TAB_LEADER.DOTS)
         pf.space_after = Pt(3)
         pf.line_spacing = 1.5
+        pf.first_line_indent = Cm(0)
+        p.alignment = WD_ALIGN_PARAGRAPH.LEFT
         text = f"{title}\t{page}" if page else title
         run = p.add_run(text)
         _set_run(run, size=14, bold=is_bold)

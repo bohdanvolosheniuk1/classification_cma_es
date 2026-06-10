@@ -22,7 +22,7 @@ from pathlib import Path
 
 from docx import Document
 from docx.shared import Cm, Pt
-from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+from docx.enum.text import WD_PARAGRAPH_ALIGNMENT, WD_BREAK
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 
@@ -109,13 +109,94 @@ def _to_plain_text(s: str) -> str:
     return "".join(_MATH_ITALIC_MAP.get(c, c) for c in s)
 
 
-def _collect_omml_text(elem) -> str:
-    """Збирає весь текст з усіх <m:t> всередині OMML-елемента."""
+_SUPSCRIPT_DIGITS_MAP = {
+    "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴",
+    "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹",
+    "+": "⁺", "-": "⁻", "=": "⁼", "(": "⁽", ")": "⁾",
+    "n": "ⁿ", "i": "ⁱ", "T": "ᵀ", "t": "ᵗ",
+}
+
+
+def _to_unicode_superscript(s: str) -> str:
+    """Перетворює рядок на Unicode superscript-форму, де можливо."""
+    return "".join(_SUPSCRIPT_DIGITS_MAP.get(ch, ch) for ch in s)
+
+
+_SUBSCRIPT_DIGITS = {ch: chr(0x2080 + i) for i, ch in enumerate("0123456789")}
+_SUBSCRIPT_DIGITS["+"] = "₊"
+_SUBSCRIPT_DIGITS["-"] = "₋"
+_SUBSCRIPT_DIGITS["="] = "₌"
+_SUBSCRIPT_DIGITS["("] = "₍"
+_SUBSCRIPT_DIGITS[")"] = "₎"
+_SUBSCRIPT_LETTERS = {
+    "a": "ₐ", "e": "ₑ", "h": "ₕ", "i": "ᵢ", "j": "ⱼ", "k": "ₖ",
+    "l": "ₗ", "m": "ₘ", "n": "ₙ", "o": "ₒ", "p": "ₚ", "r": "ᵣ",
+    "s": "ₛ", "t": "ₜ", "u": "ᵤ", "v": "ᵥ", "x": "ₓ",
+}
+
+
+def _to_unicode_subscript(s: str) -> str:
+    """Перетворює рядок на Unicode subscript-форму (для індексів формул)."""
+    out = []
+    for ch in s:
+        if ch in _SUBSCRIPT_DIGITS:
+            out.append(_SUBSCRIPT_DIGITS[ch])
+        elif ch.lower() in _SUBSCRIPT_LETTERS:
+            out.append(_SUBSCRIPT_LETTERS[ch.lower()])
+        else:
+            out.append(ch)
+    return "".join(out)
+
+
+def _omml_to_plain(elem) -> str:
+    """Розкручує OMML-структуру у простий читабельний текст.
+
+    Підтримує: <m:t> — звичайний текст, <m:d> — дужки (fenced),
+    <m:sub> — підіндекс (Unicode subscript), <m:sup> — надіндекс
+    (^xxx нотація). Працює рекурсивно.
+    """
     parts = []
-    for t_elem in elem.iter(qn("m:t")):
-        if t_elem.text:
-            parts.append(t_elem.text)
+    for child in elem:
+        local = child.tag.split("}", 1)[-1]
+        if local == "t":
+            parts.append(child.text or "")
+        elif local == "d":
+            # дужки. Тип дужок з dPr/begChr/endChr; за замовчуванням ( )
+            beg, end = "(", ")"
+            pr = child.find(qn("m:dPr"))
+            if pr is not None:
+                bch = pr.find(qn("m:begChr"))
+                if bch is not None and bch.get(qn("m:val")):
+                    beg = bch.get(qn("m:val"))
+                ech = pr.find(qn("m:endChr"))
+                if ech is not None and ech.get(qn("m:val")):
+                    end = ech.get(qn("m:val"))
+            inner = _omml_to_plain(child)
+            parts.append(f"{beg}{inner}{end}")
+        elif local == "sub":
+            # піднідекс — у Unicode subscript
+            inner = _omml_to_plain(child)
+            parts.append(_to_unicode_subscript(inner))
+        elif local == "sup":
+            inner = _omml_to_plain(child)
+            if not inner:
+                continue
+            # пробуємо Unicode superscript; якщо не всі символи перевелись —
+            # ставимо ^ перед оригіналом
+            sup = _to_unicode_superscript(inner)
+            if all(ch in _SUPSCRIPT_DIGITS_MAP for ch in inner):
+                parts.append(sup)
+            else:
+                parts.append(f"^{inner}")
+        else:
+            # рекурсивно пройти всередину
+            parts.append(_omml_to_plain(child))
     return "".join(parts)
+
+
+def _collect_omml_text(elem) -> str:
+    """Збирає текст з OMML з урахуванням дужок та підіндексів."""
+    return _omml_to_plain(elem)
 
 
 def _make_text_run(text: str, *, italic: bool = True, size_pt: int = 14):
@@ -292,6 +373,97 @@ def _delete_paragraph(p) -> None:
     p_elem.getparent().remove(p_elem)
 
 
+def _insert_chapter_heading_before(p, title: str, *, page_break: bool = True):
+    """Вставляє ЗАГОЛОВОК 'РОЗДІЛ N. НАЗВА' (жирним, по центру) перед p.
+
+    Опційно — з page-break перед заголовком, щоб розділ починався з
+    нової сторінки.
+    """
+    p_elem = p._p
+    parent = p_elem.getparent()
+    idx = list(parent).index(p_elem)
+
+    # 1. Параграф із page-break (порожній, тільки <w:br type="page"/>)
+    if page_break:
+        pb = OxmlElement("w:p")
+        r = OxmlElement("w:r")
+        br = OxmlElement("w:br")
+        br.set(qn("w:type"), "page")
+        r.append(br)
+        pb.append(r)
+        parent.insert(idx, pb)
+        idx += 1
+
+    # 2. Параграф із заголовком розділу
+    p_head = OxmlElement("w:p")
+    pPr = OxmlElement("w:pPr")
+    jc = OxmlElement("w:jc")
+    jc.set(qn("w:val"), "center")
+    pPr.append(jc)
+    spacing = OxmlElement("w:spacing")
+    spacing.set(qn("w:before"), "240")
+    spacing.set(qn("w:after"), "240")
+    pPr.append(spacing)
+    p_head.append(pPr)
+
+    r = OxmlElement("w:r")
+    rPr = OxmlElement("w:rPr")
+    b = OxmlElement("w:b")
+    rPr.append(b)
+    sz = OxmlElement("w:sz")
+    sz.set(qn("w:val"), "28")  # 14pt = 28 half-points
+    rPr.append(sz)
+    rFonts = OxmlElement("w:rFonts")
+    rFonts.set(qn("w:ascii"), "Times New Roman")
+    rFonts.set(qn("w:hAnsi"), "Times New Roman")
+    rFonts.set(qn("w:cs"), "Times New Roman")
+    rPr.append(rFonts)
+    r.append(rPr)
+    t = OxmlElement("w:t")
+    t.set(qn("xml:space"), "preserve")
+    t.text = title
+    r.append(t)
+    p_head.append(r)
+    parent.insert(idx, p_head)
+
+
+def _insert_page_break_before(p):
+    """Вставляє page-break безпосередньо перед параграфом p."""
+    p_elem = p._p
+    parent = p_elem.getparent()
+    idx = list(parent).index(p_elem)
+    pb = OxmlElement("w:p")
+    r = OxmlElement("w:r")
+    br = OxmlElement("w:br")
+    br.set(qn("w:type"), "page")
+    r.append(br)
+    pb.append(r)
+    parent.insert(idx, pb)
+
+
+def _make_subheading(p):
+    """Перетворює параграф на жирний підпункт по центру (1.1, 2.3 і т.д.)."""
+    text = p.text.strip()
+    if not text:
+        return
+    _clear_paragraph(p)
+    pf = p.paragraph_format
+    pf.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+    pf.first_line_indent = Cm(0)
+    pf.left_indent = Cm(0)
+    pf.space_before = Pt(12)
+    pf.space_after = Pt(8)
+    pf.keep_with_next = True
+    run = p.add_run(text)
+    run.bold = True
+    run.font.name = "Times New Roman"
+    run.font.size = Pt(14)
+
+
+_SUBHEADING_RE = re.compile(r"^\d+\.\d+(\.\d+)?\s+\S")
+_CONCLUSION_RE = re.compile(r"^Висновки до розділу\s+\d+\s*$", re.IGNORECASE)
+
+
 def main() -> int:
     if not SRC.exists():
         print(f"ПОМИЛКА: {SRC} не знайдено", file=sys.stderr)
@@ -346,12 +518,51 @@ def main() -> int:
             _delete_paragraph(paragraphs[i])
             n_duplicates += 1
 
+    # 6. Зробити жирний-центр підпункти "1.1", "1.2", "2.1" і т.д.
+    # Висновки до розділу — теж жирний центр + page-break before.
+    paragraphs = list(doc.paragraphs)
+    n_subheadings = 0
+    n_conclusion_breaks = 0
+    for p in paragraphs:
+        t = p.text.strip()
+        if _SUBHEADING_RE.match(t):
+            _make_subheading(p)
+            n_subheadings += 1
+        elif _CONCLUSION_RE.match(t):
+            _make_subheading(p)
+            _insert_page_break_before(p)
+            n_conclusion_breaks += 1
+
+    # 7. Перед першим підпунктом '1.1' додаємо заголовок РОЗДІЛ 1,
+    # перед '2.1' — РОЗДІЛ 2 з page-break.
+    paragraphs = list(doc.paragraphs)
+    n_chapter_headings = 0
+    seen_chapter1 = False
+    seen_chapter2 = False
+    for p in paragraphs:
+        t = p.text.strip()
+        if not seen_chapter1 and t.startswith("1.1 "):
+            _insert_chapter_heading_before(
+                p, "РОЗДІЛ 1. УЗАГАЛЬНЕНІ АДИТИВНІ МОДЕЛІ",
+                page_break=False)
+            seen_chapter1 = True
+            n_chapter_headings += 1
+        elif not seen_chapter2 and t.startswith("2.1 "):
+            _insert_chapter_heading_before(
+                p, "РОЗДІЛ 2. АЛГОРИТМ АДАПТАЦІЇ КОВАРІАЦІЙНОЇ МАТРИЦІ",
+                page_break=True)
+            seen_chapter2 = True
+            n_chapter_headings += 1
+
     doc.save(DST)
     print(f"Замінено формул на PNG     : {n_replaced}")
     print(f"OMML-руни прибрано (текст залишено): {n_stripped}")
     print(f"'Де:' нормалізовано (жирний): {n_de_normalized}")
     print(f"Дублікатів 'Де:' видалено   : {n_duplicates}")
-    print(f"Визначень вирівняно лівим   : {n_aligned}")
+    print(f"Визначень буллетизовано   : {n_aligned}")
+    print(f"Підпунктів-заголовків      : {n_subheadings}")
+    print(f"Висновків з page-break     : {n_conclusion_breaks}")
+    print(f"Заголовків розділів додано : {n_chapter_headings}")
     print(f"Збережено: {DST.name} ({DST.stat().st_size // 1024} KB)")
     return 0
 
