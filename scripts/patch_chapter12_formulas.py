@@ -34,7 +34,7 @@ FIGURES_DIR = REPO_ROOT.parent / "diploma_figures"
 
 # Зіставлення позиції OMML-параграфа з PNG і номером формули.
 # Позиції визначено через _dump-аналіз polished-файлу.
-# Решта OMML-параграфів — це короткі inline-руни в "Де:"-блоках,
+# Решта OMML-параграфів – це короткі inline-руни в "Де:"-блоках,
 # їх просто видаляємо.
 FORMULA_MAP = {
     12:  ("formula_1_1_additive.png", "(1.1)", 11.0),
@@ -91,7 +91,7 @@ for i, ch in enumerate("abcdefghijklmnopqrstuvwxyz"):
         _MATH_ITALIC_MAP[chr(0x210E)] = 'h'
     else:
         _MATH_ITALIC_MAP[chr(0x1D44E + i)] = ch
-# Грецькі italic Math: U+1D6FC..U+1D71B (α..ω) — і ψ/ω
+# Грецькі italic Math: U+1D6FC..U+1D71B (α..ω) – і ψ/ω
 _greek_italic_start = 0x1D6FC  # α
 _greek_lower = "αβγδεζηθικλμνξοπρςστυφχψω"
 for i, ch in enumerate(_greek_lower):
@@ -101,7 +101,7 @@ _greek_upper = "ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡϴΣΤΥΦΧΨΩ"
 _GREEK_ITAL_UPPER_START = 0x1D6E2  # Math italic Greek Cap A
 for i, ch in enumerate(_greek_upper):
     _MATH_ITALIC_MAP[chr(_GREEK_ITAL_UPPER_START + i)] = ch
-# Math bold italic alternatives — поки що не покриваємо
+# Math bold italic alternatives – поки що не покриваємо
 
 
 def _to_plain_text(s: str) -> str:
@@ -151,8 +151,8 @@ def _to_unicode_subscript(s: str) -> str:
 def _omml_to_plain(elem) -> str:
     """Розкручує OMML-структуру у простий читабельний текст.
 
-    Підтримує: <m:t> — звичайний текст, <m:d> — дужки (fenced),
-    <m:sub> — підіндекс (Unicode subscript), <m:sup> — надіндекс
+    Підтримує: <m:t> – звичайний текст, <m:d> – дужки (fenced),
+    <m:sub> – підіндекс (Unicode subscript), <m:sup> – надіндекс
     (^xxx нотація). Працює рекурсивно.
     """
     parts = []
@@ -174,14 +174,14 @@ def _omml_to_plain(elem) -> str:
             inner = _omml_to_plain(child)
             parts.append(f"{beg}{inner}{end}")
         elif local == "sub":
-            # піднідекс — у Unicode subscript
+            # піднідекс – у Unicode subscript
             inner = _omml_to_plain(child)
             parts.append(_to_unicode_subscript(inner))
         elif local == "sup":
             inner = _omml_to_plain(child)
             if not inner:
                 continue
-            # пробуємо Unicode superscript; якщо не всі символи перевелись —
+            # пробуємо Unicode superscript; якщо не всі символи перевелись –
             # ставимо ^ перед оригіналом
             sup = _to_unicode_superscript(inner)
             if all(ch in _SUPSCRIPT_DIGITS_MAP for ch in inner):
@@ -275,10 +275,10 @@ def _is_where_marker(text: str) -> bool:
     return t in ("де:", "де :")
 
 
-# Випадок 1: "симв - опис" або "симв — опис" (з пробілом або без)
-_DEF_RE_FULL = re.compile(r"^\s*(\S.*?)\s*[-—–]\s*(.+?)\s*$")
-# Випадок 2: "- опис" (без символу — це продовження попереднього)
-_DEF_RE_NOSYM = re.compile(r"^\s*[-—–]\s*(.+?)\s*$")
+# Випадок 1: "симв - опис" або "симв – опис" (з пробілом або без)
+_DEF_RE_FULL = re.compile(r"^\s*(\S.*?)\s*[-––]\s*(.+?)\s*$")
+# Випадок 2: "- опис" (без символу – це продовження попереднього)
+_DEF_RE_NOSYM = re.compile(r"^\s*[-––]\s*(.+?)\s*$")
 
 
 def _looks_like_definition(text: str) -> bool:
@@ -290,7 +290,7 @@ def _looks_like_definition(text: str) -> bool:
 
 
 def _bulletize_definition(p) -> bool:
-    """Перетворює визначення на буллет '• симв — опис' або '• опис'.
+    """Перетворює визначення на буллет '– симв – опис' або '– опис'.
 
     Поточний текст парситься на (symbol?, description). Параграф
     очищується і збирається з буллетом, italic-символом (якщо є) та
@@ -302,7 +302,7 @@ def _bulletize_definition(p) -> bool:
     symbol = ""
     descr = ""
     # Спочатку перевіряємо паттерн "- опис" (без символу)
-    if text.lstrip().startswith(("-", "—", "–")):
+    if text.lstrip().startswith(("-", "–", "–")):
         m = _DEF_RE_NOSYM.match(text)
         if m:
             descr = m.group(1).strip()
@@ -325,7 +325,7 @@ def _bulletize_definition(p) -> bool:
     pf.line_spacing = 1.4
 
     # буллет
-    r1 = p.add_run("•  ")
+    r1 = p.add_run("–  ")
     r1.font.name = "Times New Roman"
     r1.font.size = Pt(14)
     if symbol:
@@ -335,7 +335,7 @@ def _bulletize_definition(p) -> bool:
         r2.font.size = Pt(14)
         r2.italic = True
         # тире і опис
-        r3 = p.add_run(f" — {descr}")
+        r3 = p.add_run(f" – {descr}")
     else:
         # тільки опис
         r3 = p.add_run(descr)
@@ -352,7 +352,7 @@ def _normalize_de_marker(p) -> bool:
     t = p.text.strip().lower()
     if t not in ("де:", "де :"):
         return False
-    # Замість усього вмісту — єдиний жирний run "Де:"
+    # Замість усього вмісту – єдиний жирний run "Де:"
     _clear_paragraph(p)
     pf = p.paragraph_format
     pf.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
@@ -376,7 +376,7 @@ def _delete_paragraph(p) -> None:
 def _insert_chapter_heading_before(p, title: str, *, page_break: bool = True):
     """Вставляє ЗАГОЛОВОК 'РОЗДІЛ N. НАЗВА' (жирним, по центру) перед p.
 
-    Опційно — з page-break перед заголовком, щоб розділ починався з
+    Опційно – з page-break перед заголовком, щоб розділ починався з
     нової сторінки.
     """
     p_elem = p._p
@@ -502,12 +502,23 @@ def main() -> int:
             n_de_normalized += 1
             continue
 
-        # 4. Перебудувати рядки-визначення у формат "• симв — опис"
+        # 4. Перебудувати рядки-визначення у формат "– симв – опис"
         if _looks_like_definition(p.text):
             if _bulletize_definition(p):
                 n_aligned += 1
 
-    # 5. Видалити дублікати "Де:" — якщо два маркери підряд, залишаємо
+    # 4.5. Глобальна заміна em-dash "—" на en-dash "–" у всьому тексті
+    # (загальна вимога куратора).
+    n_dash_replaced = 0
+    for p in doc.paragraphs:
+        for r in p.runs:
+            if r.text and ("—" in r.text or "•" in r.text):
+                new_text = r.text.replace("—", "–").replace("•", "–")
+                if new_text != r.text:
+                    r.text = new_text
+                    n_dash_replaced += 1
+
+    # 5. Видалити дублікати "Де:" – якщо два маркери підряд, залишаємо
     # тільки перший.
     paragraphs = list(doc.paragraphs)
     n_duplicates = 0
@@ -519,7 +530,7 @@ def main() -> int:
             n_duplicates += 1
 
     # 6. Зробити жирний-центр підпункти "1.1", "1.2", "2.1" і т.д.
-    # Висновки до розділу — теж жирний центр + page-break before.
+    # Висновки до розділу – теж жирний центр + page-break before.
     paragraphs = list(doc.paragraphs)
     n_subheadings = 0
     n_conclusion_breaks = 0
@@ -534,7 +545,7 @@ def main() -> int:
             n_conclusion_breaks += 1
 
     # 7. Перед першим підпунктом '1.1' додаємо заголовок РОЗДІЛ 1,
-    # перед '2.1' — РОЗДІЛ 2 з page-break.
+    # перед '2.1' – РОЗДІЛ 2 з page-break.
     paragraphs = list(doc.paragraphs)
     n_chapter_headings = 0
     seen_chapter1 = False
@@ -544,7 +555,7 @@ def main() -> int:
         if not seen_chapter1 and t.startswith("1.1 "):
             _insert_chapter_heading_before(
                 p, "РОЗДІЛ 1. УЗАГАЛЬНЕНІ АДИТИВНІ МОДЕЛІ",
-                page_break=False)
+                page_break=True)
             seen_chapter1 = True
             n_chapter_headings += 1
         elif not seen_chapter2 and t.startswith("2.1 "):
