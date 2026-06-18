@@ -1331,6 +1331,112 @@ def add_bibliography(doc) -> None:
 
 
 # ============================================================================
+# Титульна сторінка
+
+def _title_line(doc, text, *, size=14, bold=False, italic=False,
+                align=WD_ALIGN_PARAGRAPH.CENTER, space=Pt(2),
+                indent=None):
+    """Один центрований рядок на титульній сторінці."""
+    p = doc.add_paragraph()
+    p.alignment = align
+    pf = p.paragraph_format
+    pf.first_line_indent = Cm(0) if indent is None else indent
+    pf.space_after = space
+    pf.line_spacing = 1.2
+    run = p.add_run(text)
+    _set_run(run, size=size, bold=bold, italic=italic)
+    return p
+
+
+def _title_caption(doc, text):
+    """Маленька курсивна підказка під полем (напр. '(шифр і назва...)')"""
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    pf = p.paragraph_format
+    pf.space_after = Pt(8)
+    pf.line_spacing = 1.0
+    run = p.add_run(text)
+    _set_run(run, size=11, italic=True)
+
+
+def add_title_page(doc) -> None:
+    """Титульна сторінка дипломної роботи за шаблоном ШаблонДипломна.docx."""
+    # Шапка
+    _title_line(doc, "Міністерство освіти і науки України", bold=True)
+    _title_line(doc, "Чернівецький національний університет", bold=True)
+    _title_line(doc, "імені Юрія Федьковича", bold=True, space=Pt(18))
+
+    _title_line(doc,
+                "Навчально-науковий інститут фізико-технічних "
+                "та комп'ютерних наук", space=Pt(2))
+    _title_caption(doc, "(повна назва інституту/факультету)")
+
+    _title_line(doc,
+                "Кафедра математичних проблем управління і кібернетики",
+                space=Pt(2))
+    _title_caption(doc, "(повна назва кафедри)")
+
+    # пустий простір
+    for _ in range(4):
+        doc.add_paragraph()
+
+    # Тема роботи
+    _title_line(doc,
+                "Порівняння методів класифікації з розширеним "
+                "алгоритмом CMA-ES",
+                size=18, bold=True, space=Pt(18))
+
+    _title_line(doc, "Випускна кваліфікаційна робота",
+                size=14, bold=True, space=Pt(4))
+    _title_line(doc,
+                "Рівень вищої освіти – перший (бакалаврський)",
+                size=14, bold=True, space=Pt(24))
+
+    # Виконавець (праворуч)
+    def _right(text, *, bold=False, italic=False, size=13, space=Pt(2)):
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        pf = p.paragraph_format
+        pf.first_line_indent = Cm(0)
+        pf.space_after = space
+        pf.line_spacing = 1.15
+        run = p.add_run(text)
+        _set_run(run, size=size, bold=bold, italic=italic)
+
+    _right("Виконав:", bold=True)
+    _right("студент 4 курсу, групи 441-А")
+    _right("спеціальності 122 – Комп'ютерні науки")
+    _right("(шифр і назва спеціальності)", italic=True, size=11)
+    _right("Волошенюк Богдан Анатолійович", bold=True)
+    _right("(прізвище, ім'я, по батькові)", italic=True, size=11,
+           space=Pt(12))
+
+    _right("Керівник: д. ф.-м. н., проф. Малик І. В.", bold=True)
+    _right("(науковий ступінь, вчене звання, прізвище та ініціали)",
+           italic=True, size=11, space=Pt(18))
+
+    # До захисту допущено
+    _title_line(doc, "До захисту допущено.",
+                bold=True, align=WD_ALIGN_PARAGRAPH.LEFT,
+                space=Pt(2))
+    _title_line(doc, "Протокол засідання кафедри № ______",
+                bold=True, align=WD_ALIGN_PARAGRAPH.LEFT,
+                space=Pt(2))
+    _title_line(doc, "від «___» __________________ 2026 р.",
+                align=WD_ALIGN_PARAGRAPH.LEFT, space=Pt(2))
+    _title_line(doc,
+                "Зав. кафедри ____________ д. ф.-м. н., проф. Малик І. В.",
+                bold=True, align=WD_ALIGN_PARAGRAPH.LEFT,
+                space=Pt(18))
+
+    # Місто/рік знизу
+    _title_line(doc, "Чернівці – 2026",
+                size=14, bold=True, space=Pt(0))
+
+    _page_break(doc)
+
+
+# ============================================================================
 # Анотація
 
 def _keywords_paragraph(doc, *, lead: str, words: str):

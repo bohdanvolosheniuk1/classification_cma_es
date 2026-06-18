@@ -60,14 +60,15 @@ SLIDES = [
     {
         "kind": "title_hero",
         "act": "HOOK",
-        "title": "CMA-ES\nяк інструмент\nналаштування\nпараметрів",
-        "subtitle": ("в алгоритмах класифікації\n\n"
+        "title": "CMA-ES",
+        "subtitle": ("як інструмент налаштування параметрів\n"
+                     "в алгоритмах класифікації\n\n"
                      "Випускна кваліфікаційна робота бакалавра\n"
                      "Спеціальність 122 «Комп'ютерні науки»"),
         "author_block": [
             "Виконав: Волошенюк Богдан Анатолійович",
             "група 441-А",
-            "Керівник: кандидат фіз.-мат. наук, доцент Малик І. В.",
+            "Керівник: д. фіз.-мат. наук, проф. Малик І. В.",
             "ЧНУ ім. Юрія Федьковича · 2026",
         ],
         "speech": (
@@ -387,49 +388,31 @@ SLIDES = [
         ),
     },
 
-    # ---- Слайд 13 – Загальний подіум ----
+    # ---- Слайд: Скріншот таблиці метрик ----
     {
-        "kind": "podium_results",
+        "kind": "image_with_caption",
         "act": "SOLUTION",
-        "label": "Результати",
-        "title": "Три задачі – три переможці",
-        "podium": [
-            {
-                "rank": "PhiUSIIL",
-                "winner": "GAM",
-                "score": "F1 = 1.000",
-                "comment": "Бінарна phishing-класифікація. Ідеальні метрики.",
-                "color": COLOR_ACCENT_3,
-            },
-            {
-                "rank": "Steel Plate",
-                "winner": "tuned_svm",
-                "score": "F1 = 0.760",
-                "comment": "Мультиклас, 7 типів дефектів.",
-                "color": COLOR_ACCENT_1,
-            },
-            {
-                "rank": "Credit Default",
-                "winner": "tuned_mlp",
-                "score": "F1 = 0.436",
-                "comment": "Незбалансовані класи 78/22.",
-                "color": COLOR_ACCENT_2,
-            },
-        ],
-        "insight": "Підбір гіперпараметрів через CMA-ES – стабільно покращує базу.",
+        "label": "Порівняння метрик",
+        "title": "Таблиця метрик у дашборді",
+        "image": DIPLOMA_FIG / "dashboard_table.png",
+        "tagline": ("Інтерактивна таблиця: кольорові progress-бари на "
+                    "адаптивній шкалі дозволяють бачити різницю навіть "
+                    "між значеннями 0.998 та 0.999"),
         "speech": (
-            "Експерименти підтвердили принцип, з якого ми починали. На "
-            "трьох різних задачах – три різні переможці. На PhiUSIIL "
-            "найкращим виявився GAM з ідеальними метриками. На Steel "
-            "Plate Defects переміг tuned_svm з підбором гіперпараметрів. "
-            "На Credit Default tuned_mlp лідирував з F1 близько 0.43. "
-            "Найважливіший висновок: моделі з префіксом tuned, де "
-            "CMA-ES підбирає гіперпараметри, стабільно перевершують "
-            "свої базові варіанти."
+            "Перш ніж перейти до підсумків, покажу як виглядають "
+            "результати в інтерактивному вигляді. На цьому скріншоті – "
+            "центральний елемент дашборду: таблиця метрик усіх "
+            "дванадцяти моделей одночасно. У колонках Accuracy, F1 та "
+            "AUC значення відображаються не просто числами, а "
+            "кольоровими progress-барами з адаптивною шкалою. Це "
+            "дозволяє візуально побачити різницю між моделями навіть "
+            "тоді, коли всі вони дають дуже близькі значення – "
+            "наприклад, 0,998 проти 0,999. Усю таблицю можна одразу "
+            "експортувати у CSV для подальшої вставки у звіт."
         ),
     },
 
-    # ---- Слайд 14 – PhiUSIIL детально ----
+    # ---- Слайд: PhiUSIIL детально ----
     {
         "kind": "two_col_card",
         "act": "SOLUTION",
@@ -751,25 +734,25 @@ def _slide_title_hero(prs, data):
     _shape_rect(slide, Cm(0), prs.slide_height - Cm(0.4),
                 Cm(1.0), Cm(0.25), fill=COLOR_ACCENT_3)
 
-    # величезний заголовок на темному фоні зліва
-    _text(slide, Cm(0.7), Cm(3.5), Cm(8.5), Cm(7),
-          data["title"], size=42, bold=True,
-          color=COLOR_WHITE, align=PP_ALIGN.LEFT,
+    # величезний заголовок на темному фоні зліва (одне слово CMA-ES)
+    _text(slide, Cm(0.3), Cm(4.5), Cm(9.0), Cm(5),
+          data["title"], size=80, bold=True,
+          color=COLOR_WHITE, align=PP_ALIGN.CENTER,
           anchor=MSO_ANCHOR.MIDDLE)
 
-    # підзаголовок справа
-    _text(slide, Cm(10), Cm(4.0), Cm(14), Cm(3),
-          data["subtitle"], size=20, bold=True,
+    # підзаголовок справа (5 рядків, потрібен більший блок)
+    _text(slide, Cm(10), Cm(2.0), Cm(14.5), Cm(5.5),
+          data["subtitle"], size=18, bold=True,
           color=COLOR_PRIMARY, align=PP_ALIGN.LEFT)
 
     # автор – компактний блок з кольоровою смугою зліва
-    _shape_rect(slide, Cm(10), Cm(8), Cm(0.2), Cm(3),
+    _shape_rect(slide, Cm(10), Cm(8.3), Cm(0.2), Cm(4),
                 fill=COLOR_ACCENT_2)
     for i, line in enumerate(data["author_block"]):
-        sz = 15 if i == 0 else 13
+        sz = 14 if i == 0 else 12
         bold = (i == 0)
         col = COLOR_TEXT if i == 0 else COLOR_MUTED
-        _text(slide, Cm(10.5), Cm(8 + i * 0.85), Cm(14), Cm(0.9),
+        _text(slide, Cm(10.5), Cm(8.3 + i * 0.85), Cm(14.5), Cm(0.9),
               line, size=sz, bold=bold, color=col, align=PP_ALIGN.LEFT)
 
     _add_notes(slide, data["speech"])
@@ -1231,6 +1214,53 @@ def _slide_contribution(prs, data):
 # =============================================================================
 # SLIDE 12 – final QR
 
+def _slide_image_with_caption(prs, data):
+    """Слайд із зображенням (зокрема скріншотом таблиці) на повну ширину.
+
+    Очікувані поля: label, title, image (Path), tagline (опційно).
+    """
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    _shape_rect(slide, Cm(0), Cm(0), prs.slide_width, prs.slide_height,
+                fill=COLOR_BG_LIGHT)
+    _act_badge(slide, prs, data["act"])
+
+    # маленький лейбл вгорі
+    _text(slide, Cm(1), Cm(0.7), Cm(20), Cm(0.7),
+          data["label"].upper(), size=12, bold=True,
+          color=COLOR_ACCENT_2, align=PP_ALIGN.LEFT)
+
+    # title
+    _text(slide, Cm(1), Cm(1.5), prs.slide_width - Cm(2), Cm(1.2),
+          data["title"], size=24, bold=True,
+          color=COLOR_PRIMARY, align=PP_ALIGN.LEFT)
+
+    # картинка по центру
+    img = data.get("image")
+    if img and Path(img).exists():
+        # рамка-тінь
+        max_w = Cm(20)
+        max_h = Cm(9.5)
+        x = (prs.slide_width - max_w) // 2
+        y = Cm(3.0)
+        _shape_rect(slide, x + Cm(0.15), y + Cm(0.15),
+                    max_w, max_h, fill=COLOR_SHADOW)
+        _shape_rect(slide, x, y, max_w, max_h, fill=COLOR_WHITE)
+        slide.shapes.add_picture(str(img),
+                                 x + Cm(0.2), y + Cm(0.2),
+                                 width=max_w - Cm(0.4),
+                                 height=max_h - Cm(0.4))
+
+    # підпис знизу
+    tagline = data.get("tagline")
+    if tagline:
+        _text(slide, Cm(1), Cm(13), prs.slide_width - Cm(2), Cm(0.8),
+              tagline, size=13, italic=True,
+              color=COLOR_MUTED, align=PP_ALIGN.CENTER)
+
+    _footer_brand(slide, prs)
+    _add_notes(slide, data["speech"])
+
+
 def _slide_thanks_big(prs, data):
     """Великий слайд «Дякую за увагу!» – головне посередині на всю ширину."""
     slide = prs.slides.add_slide(prs.slide_layouts[6])
@@ -1371,6 +1401,7 @@ def build_pptx() -> Path:
         "contribution": _slide_contribution,
         "final_qr": _slide_final_qr,
         "thanks_big": _slide_thanks_big,
+        "image_with_caption": _slide_image_with_caption,
     }
     for data in SLIDES:
         builders[data["kind"]](prs, data)

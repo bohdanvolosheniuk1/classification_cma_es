@@ -36,6 +36,7 @@ from generate_diploma_sections import (
     add_introduction,
     add_sections_to,
     add_table_of_contents,
+    add_title_page,
 )
 
 
@@ -72,9 +73,10 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
 
-        # 1. Анотація + Зміст + Вступ — головна частина перед теорією
-        print("Готую анотацію, зміст і вступ...")
+        # 1. Титулка + Анотація + Зміст + Вступ — головна частина перед теорією
+        print("Готую титулку, анотацію, зміст і вступ...")
         front_doc = _make_blank_doc()
+        add_title_page(front_doc)
         add_annotation(front_doc)
         add_table_of_contents(front_doc)
         front_doc.add_page_break()
